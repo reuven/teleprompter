@@ -20,7 +20,7 @@ import Testing
 
 @Test func recentsDedupedCappedOrdered() {
     var s = Settings()
-    let u = (1...6).map { URL(fileURLWithPath: "/tmp/\($0).md") }
+    let u = (1...6).map { URL(fileURLWithPath: "/notes/\($0).md") }
     for url in u { s.noteOpened(url) }
     s.noteOpened(u[2])
     #expect(
@@ -35,18 +35,18 @@ import Testing
 }
 
 @Test func decodingTrimsAndDedupesRecents() throws {
-    let urls = (1...8).map { "\"file:///tmp/\($0).md\"" } + ["\"file:///tmp/1.md\""]
+    let urls = (1...8).map { "\"file:///notes/\($0).md\"" } + ["\"file:///notes/1.md\""]
     let json = Data("{\"recentFiles\":[\(urls.joined(separator: ","))]}".utf8)
     let s = try JSONDecoder().decode(Settings.self, from: json)
     #expect(s.recentFiles.count == 5 && Set(s.recentFiles).count == 5)
-    #expect(s.recentFiles.first == URL(string: "file:///tmp/1.md"))
+    #expect(s.recentFiles.first == URL(string: "file:///notes/1.md"))
 }
 
 @Test func storeRoundTrips() {
     let d = UserDefaults(suiteName: "test.\(UUID())")!
     let store = SettingsStore(defaults: d)
     var s = Settings(fontSize: 40)
-    s.noteOpened(URL(fileURLWithPath: "/tmp/a.md"))
+    s.noteOpened(URL(fileURLWithPath: "/notes/a.md"))
     store.save(s)
     #expect(store.load() == s)
 }
@@ -75,11 +75,12 @@ import Testing
 
 @Test func wrongTypedKeyDegradesAlone() throws {
     let json = Data(
-        #"{"fontSize":"big","opacity":0.5,"recentFiles":["file:///tmp/a.md","file:///tmp/b.md"]}"#
+        #"{"fontSize":"big","opacity":0.5,"recentFiles":["file:///notes/a.md","file:///notes/b.md"]}"#
             .utf8)
     let s = try JSONDecoder().decode(Settings.self, from: json)
     #expect(s.fontSize == 32 && s.opacity == 0.5)
-    #expect(s.recentFiles == [URL(string: "file:///tmp/a.md")!, URL(string: "file:///tmp/b.md")!])
+    #expect(
+        s.recentFiles == [URL(string: "file:///notes/a.md")!, URL(string: "file:///notes/b.md")!])
 }
 
 @Test func invalidRecentsArrayBecomesEmpty() throws {
@@ -113,8 +114,25 @@ import Testing
 }
 
 @Test func launchFileIsTheLastFileOnlyWhileItExists() {
-    let url = URL(fileURLWithPath: "/tmp/talk.md")
+    let url = URL(fileURLWithPath: "/notes/talk.md")
     #expect(Settings().launchFile(exists: { _ in true }) == nil)
     #expect(Settings(lastFileURL: url).launchFile(exists: { $0 == url }) == url)
     #expect(Settings(lastFileURL: url).launchFile(exists: { _ in false }) == nil)
+}
+
+@Test func recentsTreatTwoPathsToOneFileAsOne() throws {
+    let dir = FileManager.default.temporaryDirectory.appending(path: "SettingsTests-\(UUID())")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let file = dir.appending(path: "talk.md")
+    try Data("x".utf8).write(to: file)
+    let link = dir.appending(path: "link.md")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+    var s = Settings()
+    s.noteOpened(file)
+    s.noteOpened(link)
+    s.noteOpened(dir.appending(path: "sub/../talk.md"))
+    #expect(s.recentFiles.count == 1)
+    #expect(s.lastFileURL == s.recentFiles.first)
+    #expect(Settings(recentFiles: [file, link]).recentFiles.count == 1, "decoded lists too")
 }

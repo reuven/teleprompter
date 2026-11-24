@@ -69,9 +69,16 @@ public struct Settings: Codable, Sendable, Equatable {
     }
 
     /// Records that `url` was opened: it becomes the last file and the most recent entry.
+    /// Stored in canonical form (see `canonical`), so the last file and its recent entry match.
     public mutating func noteOpened(_ url: URL) {
-        lastFileURL = url
+        lastFileURL = Settings.canonical(url)
         recentFiles = Settings.normalizedRecents([url] + recentFiles)
+    }
+
+    /// `url` with `.`/`..` removed and symlinks resolved, so two paths to one file are one
+    /// recent entry, not two.
+    public static func canonical(_ url: URL) -> URL {
+        url.standardizedFileURL.resolvingSymlinksInPath()
     }
 
     /// Changes the font size by `steps` × `fontSizeStep` (negative to shrink), clamped like any
@@ -109,7 +116,7 @@ public struct Settings: Codable, Sendable, Equatable {
 
     private static func normalizedRecents(_ urls: [URL]) -> [URL] {
         var seen = Set<URL>()
-        return Array(urls.filter { seen.insert($0).inserted }.prefix(maxRecentFiles))
+        return Array(urls.map(canonical).filter { seen.insert($0).inserted }.prefix(maxRecentFiles))
     }
 }
 

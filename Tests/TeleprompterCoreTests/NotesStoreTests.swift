@@ -539,6 +539,94 @@ private func contents(_ url: URL) throws -> String {
         #expect(store.lastError == error, "only a save's own error goes stale when it succeeds")
     }
 
+    @Test func keptScratchWarningSurvivesASuccessfulFileSave() async throws {
+        let unlockScratch = try lockScratchFolder()
+        defer { try? unlockScratch() }
+        let store = makeStore(saveDelay: .milliseconds(10))
+        store.userEdited("scratch typing")
+        let file = try makeFile("f")
+        store.open(file)
+        store.userEdited("file edit")
+        // The debounced file save succeeds; nothing has saved scratch.
+        #expect(await waitUntil { (try? contents(file)) == "file edit" })
+        #expect(store.lastError?.contains("scratch notes") == true)
+        #expect(store.hasUnsavedChanges)
+    }
+
+    @Test func fileSaveErrorSurvivesASuccessfulScratchSave() async throws {
+        let unlockScratch = try lockScratchFolder()
+        let store = makeStore(saveDelay: .seconds(30))
+        store.userEdited("scratch typing")
+        let locked = try openLockedFile(store)
+        defer { try? unlock(locked) }
+        store.userEdited("new")
+        try unlockScratch()
+        await store.flush()  // The file save fails; the kept scratch notes are saved.
+        #expect(try contents(scratchURL) == "scratch typing")
+        #expect(store.lastError?.contains("locked.md") == true)
+        #expect(store.hasUnsavedChanges, "the file edit is still pending")
+    }
+
+    @Test func dismissedSuspendedSavingIsRaisedAgainOnTheNextSave() async throws {
+        let store = makeStore()
+        let file = try makeFile("hello")
+        store.open(file)
+        try atomicReplace(file, with: Data([0xFF, 0xFE, 0x00]))
+        #expect(await waitUntil { store.lastError != nil })
+        store.dismissError()
+        store.userEdited("typed while suspended")
+        await store.flush()
+        let error = try #require(store.lastError)
+        #expect(error.contains("talk.md") && error.contains("not being saved"))
+        #expect(store.hasUnsavedChanges)
+    }
+
+    @Test func hasUnsavedChangesTracksPendingAndKeptEdits() async throws {
+        let store = makeStore(saveDelay: .seconds(30))
+        #expect(!store.hasUnsavedChanges)
+        store.userEdited("typed")
+        #expect(store.hasUnsavedChanges)
+        await store.flush()
+        #expect(!store.hasUnsavedChanges)
+    }
+
+    @Test func refusesFilesOver2MB() throws {
+        let store = makeStore()
+        let big = dir.appendingPathComponent("big.md")
+        try Data(repeating: 0x61, count: NotesStore.maxFileSize + 1).write(to: big)
+        store.open(big)
+        #expect(store.source == .scratch)
+        let error = try #require(store.lastError)
+        #expect(error.contains("big.md") && error.contains("2 MB"))
+        let fits = dir.appendingPathComponent("fits.md")
+        try Data(repeating: 0x61, count: NotesStore.maxFileSize).write(to: fits)
+        store.open(fits)
+        #expect(store.source == .file(fits))
+    }
+
+    @Test func refusesToOpenTheScratchFileItself() async throws {
+        let store = makeStore()
+        store.userEdited("scratch")
+        await store.flush()
+        let sameFile = dir.appendingPathComponent("Support/../Support/scratch.md")
+        store.open(sameFile)
+        #expect(store.source == .scratch)
+        #expect(store.lastError?.contains("scratch notes") == true)
+        let link = dir.appendingPathComponent("link.md")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: scratchURL)
+        store.open(link)
+        #expect(store.source == .scratch)
+    }
+
+    @Test func onlyReadableRegularFilesAreOpenable() throws {
+        let file = try makeFile("x")
+        #expect(NotesStore.isOpenableFile(file))
+        #expect(!NotesStore.isOpenableFile(dir), "a folder")
+        #expect(!NotesStore.isOpenableFile(dir.appendingPathComponent("nowhere.md")))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)
+        #expect(!NotesStore.isOpenableFile(file), "unreadable")
+    }
+
     @Test func blockedScratchSaveIsRaisedAgainAfterDismissal() async throws {
         let blocker = try makeFile("x", name: "blocker")
         let store = NotesStore(

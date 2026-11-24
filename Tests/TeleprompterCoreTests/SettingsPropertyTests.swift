@@ -4,7 +4,7 @@ import Testing
 
 @testable import TeleprompterCore
 
-private let pool = (0..<8).map { URL(fileURLWithPath: "/tmp/pool-\($0).md") }
+private let pool = (0..<8).map { URL(fileURLWithPath: "/notes/pool-\($0).md") }
 
 @Test func fontSizeAlwaysInRange() async {
     await propertyCheck(input: Gen.double(in: -1e9...1e9)) { x in

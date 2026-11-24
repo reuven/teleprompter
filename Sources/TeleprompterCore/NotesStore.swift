@@ -67,6 +67,24 @@ public enum NotesSource: Equatable, Sendable {
     /// Separate from `onExternalChange` because an error is not a change to the notes.
     public var onErrorChange: (() -> Void)?
 
+    /// True while some edit isn't on disk: a save is waiting, failed, or held, or scratch edits
+    /// were kept in memory when a file was opened. The app asks before quitting with this set,
+    /// so notes are never lost silently.
+    public var hasUnsavedChanges: Bool { pending != nil || scratchUnsaved }
+
+    /// The largest file `open` accepts, in bytes (2 MB). Notes are a page or two; anything
+    /// bigger is almost certainly the wrong file, and fitting it would stall the reader.
+    public static let maxFileSize = 2 * 1024 * 1024
+
+    /// Whether `url` is an existing, readable regular file (not a folder). The app uses it to
+    /// decide quietly, at launch, whether the last file can be reopened.
+    public static func isOpenableFile(_ url: URL) -> Bool {
+        var isFolder: ObjCBool = false
+        let fm = FileManager.default
+        return fm.fileExists(atPath: url.path, isDirectory: &isFolder) && !isFolder.boolValue
+            && fm.isReadableFile(atPath: url.path)
+    }
+
     private let scratchURL: URL
     private let saveDelay: Duration
     /// The latest scratch text. Kept separately so an open file's text never replaces it.
@@ -76,9 +94,14 @@ public enum NotesSource: Equatable, Sendable {
     /// True when scratch edits couldn't be saved before a file was opened. `scratchText` still
     /// holds them; they're saved by `flush()` or on returning to scratch.
     private var scratchUnsaved = false
-    /// The message the last failed save put in `lastError`, so a later successful save clears
-    /// that message and only that one.
-    private var saveFailureMessage: String?
+    /// The message a failed scratch save (or kept scratch edits) put in `lastError`; only a
+    /// successful scratch write makes it stale.
+    private var scratchFailureMessage: String?
+    /// The message a failed file save put in `lastError`; only a successful file save makes it
+    /// stale.
+    private var fileFailureMessage: String?
+    /// The message for suspended file saving, raised again if dismissed while still suspended.
+    private var suspendedMessage: String?
     /// The text not yet written (waiting for the debounce, failed, or held), and where it
     /// must be written.
     private var pending: (target: NotesSource, text: String)?
@@ -115,7 +138,21 @@ public enum NotesSource: Equatable, Sendable {
     ///
     /// On failure (missing file, unreadable, not UTF-8) nothing changes except `lastError`,
     /// so a bad pick in the Open dialog never loses the current notes.
+    ///
+    /// Also refused, with a message: the scratch file itself (by any path or symlink), which
+    /// would make one file two sources, and files over `maxFileSize`.
     public func open(_ url: URL) {
+        if Self.resolved(url) == Self.resolved(scratchURL) {
+            lastError =
+                "“\(url.lastPathComponent)” holds the scratch notes; they're shown whenever no file is open."
+            return
+        }
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+            size > Self.maxFileSize
+        {
+            lastError = "Couldn't open “\(url.lastPathComponent)”: it's larger than 2 MB."
+            return
+        }
         savePendingNow()
         // Watch first, then read: a write landing between the two is then either in what
         // we read or reported by the watcher, never lost.
@@ -131,6 +168,7 @@ public enum NotesSource: Equatable, Sendable {
             text = loaded.text
             knownFileBytes = loaded.data
             fileSavesSuspended = false
+            fileFailureMessage = nil
             lastError = dropped
         case .failure(let failure):
             newWatcher.stop()
@@ -174,9 +212,7 @@ public enum NotesSource: Equatable, Sendable {
     /// the last keystrokes are not lost to the debounce, and by tests.
     public func flush() async {
         savePendingNow()
-        if scratchUnsaved, writeScratch(Data(scratchText.utf8)) {
-            scratchUnsaved = false
-        }
+        if scratchUnsaved { _ = writeScratch(Data(scratchText.utf8)) }
     }
 
     // MARK: - Saving
@@ -192,20 +228,28 @@ public enum NotesSource: Equatable, Sendable {
         case .scratch:
             if writeScratch(data) { pending = nil }
         case .file(let url):
-            guard !fileSavesSuspended else { return }
+            guard !fileSavesSuspended else {
+                // Held, not saved: if the user dismissed the notice, say so again.
+                if lastError == nil { lastError = suspendedMessage }
+                return
+            }
             do {
                 try data.write(to: url, options: .atomic)
                 knownFileBytes = data
                 pending = nil
-                saveSucceeded()
+                clearIfStale(&fileFailureMessage)
             } catch {
-                saveFailed("Couldn't save “\(url.lastPathComponent)”.")
+                fileFailureMessage = "Couldn't save “\(url.lastPathComponent)”."
+                lastError = fileFailureMessage
             }
         }
     }
 
     /// Writes scratch notes, creating the folder on first use. Returns whether it worked;
     /// failures (and blocked saving) are reported in `lastError`.
+    ///
+    /// Every scratch write carries the whole of `scratchText` (scratch edits update it and the
+    /// pending save together), so a success means no kept scratch edits remain.
     private func writeScratch(_ data: Data) -> Bool {
         guard !scratchSavesDisabled else {
             // Keep the fuller launch message if it's still up; re-raise once it's dismissed.
@@ -216,23 +260,21 @@ public enum NotesSource: Equatable, Sendable {
             try FileManager.default.createDirectory(
                 at: scratchURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: scratchURL, options: .atomic)
-            saveSucceeded()
+            scratchUnsaved = false
+            clearIfStale(&scratchFailureMessage)
             return true
         } catch {
-            saveFailed("Couldn't save “\(scratchURL.lastPathComponent)”.")
+            scratchFailureMessage = "Couldn't save “\(scratchURL.lastPathComponent)”."
+            lastError = scratchFailureMessage
             return false
         }
     }
 
-    private func saveFailed(_ message: String) {
-        lastError = message
-        saveFailureMessage = message
-    }
-
-    /// A save worked, so its own earlier failure message is out of date.
-    private func saveSucceeded() {
-        if let stale = saveFailureMessage, lastError == stale { lastError = nil }
-        saveFailureMessage = nil
+    /// A save to one target worked, so that target's own failure message is out of date. Clears
+    /// `lastError` only if it still shows that message: another target's problem stays up.
+    private func clearIfStale(_ message: inout String?) {
+        if let stale = message, lastError == stale { lastError = nil }
+        message = nil
     }
 
     private static let scratchBlocked = "Scratch notes can't be saved until you relaunch."
@@ -261,8 +303,8 @@ public enum NotesSource: Equatable, Sendable {
                 scratchSavesDisabled
                 ? "\(Self.scratchBlocked) Your scratch edits are kept until you quit."
                 : "Couldn't save scratch notes. They're kept, and saved when you close this file or quit."
-            // Stale once the kept edits are saved, like any failed save's message.
-            saveFailureMessage = message
+            // Stale once a scratch write succeeds, which also clears `scratchUnsaved`.
+            scratchFailureMessage = message
             return message
         case .file(let url):
             return "Changes to “\(url.lastPathComponent)” couldn't be saved and were discarded."
@@ -274,6 +316,7 @@ public enum NotesSource: Equatable, Sendable {
         watcher = nil
         knownFileBytes = nil
         fileSavesSuspended = false
+        fileFailureMessage = nil
         source = .scratch
         text = scratchText
         if scratchUnsaved {
@@ -339,14 +382,20 @@ public enum NotesSource: Equatable, Sendable {
             fileSavesSuspended = true
             pendingTask?.cancel()
             pendingTask = nil
-            lastError =
+            suspendedMessage =
                 "\(Self.message("Couldn't reload", url, failure)) Edits are not being saved to it."
+            lastError = suspendedMessage
             return
         }
         onExternalChange?()
     }
 
     // MARK: - Reading
+
+    /// `url` with `.`/`..` removed and symlinks resolved, so two paths to one file compare equal.
+    private static func resolved(_ url: URL) -> URL {
+        url.standardizedFileURL.resolvingSymlinksInPath()
+    }
 
     private enum ReadFailure: Error {
         case missing, notUTF8, unreadable
