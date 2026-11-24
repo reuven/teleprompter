@@ -97,12 +97,6 @@ final class NotesPanel: NSPanel {
         return super.performKeyEquivalent(with: event)
     }
 
-    /// The editing action for ⌘X / ⌘C / ⌘V / ⌘A / ⌘Z (Command alone) or ⌘⇧Z, or nil.
-    ///
-    /// Why the panel maps these itself: these shortcuts normally come from the main menu's Edit
-    /// menu, but the app deliberately has no main menu, because AppKit adds Writing Tools,
-    /// Dictation and Emoji & Symbols to an Edit menu, and those open out-of-process windows
-    /// that quote the notes.
     /// The key a ⌘ shortcut means: its character when that's one ASCII character (so remapped
     /// Latin layouts such as Dvorak keep their own letters), else the US-layout character of the
     /// physical key. Why: with a Hebrew (or Greek, Cyrillic…) input source the event carries
@@ -123,6 +117,12 @@ final class NotesPanel: NSPanel {
         kVK_ANSI_KeypadMinus: "-",
     ]
 
+    /// The editing action for ⌘X / ⌘C / ⌘V / ⌘A / ⌘Z (Command alone) or ⌘⇧Z, or nil.
+    ///
+    /// Why the panel maps these itself: these shortcuts normally come from the main menu's Edit
+    /// menu, but the app deliberately has no main menu, because AppKit adds Writing Tools,
+    /// Dictation and Emoji & Symbols to an Edit menu, and those open out-of-process windows
+    /// that quote the notes.
     static func editingAction(for event: NSEvent) -> Selector? {
         let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
         switch (flags, shortcutKey(for: event)) {
