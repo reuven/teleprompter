@@ -92,17 +92,62 @@ private let mediumNotes = (1...8).map { "- point number \($0)" }.joined(separato
         #expect(!menu.allowsContextMenuPlugIns && !menu.automaticallyInsertsWritingToolsItems)
     }
 
-    @Test func editorCompletionAndLookUpDoNothing() throws {
-        let store = makeStore("hel")
-        let e = NotesContentView(store: store, maxFontSize: 32, mode: .edit, frame: frame).editor
-        e.setSelectedRange(NSRange(location: 3, length: 0))
-        e.complete(nil)
+    /// Hosts an editor holding "hello world" (with "hello" selected) in an off-screen panel, as
+    /// key and first responder, so the popups AppKit would open have somewhere to come from.
+    func hostedEditor() -> (NotesPanel, NotesEditor, NotesStore) {
+        let store = makeStore("hello world")
+        let v = NotesContentView(store: store, maxFontSize: 32, mode: .recording, frame: frame)
+        let panel = NotesPanel(settings: Settings(), content: v)
+        panel.setFrameOrigin(CGPoint(x: -20000, y: -20000))
+        panel.orderFrontRegardless()
+        var state = ModeState.initial(hasNotes: true)
+        state.toggleMode()
+        panel.apply(state, takeFocus: true)
+        v.mode = .edit
+        v.editor.setSelectedRange(NSRange(location: 0, length: 5))
+        return (panel, v.editor, store)
+    }
+
+    /// Runs `action`, lets the run loop turn so asynchronous popups can appear, and returns the
+    /// windows that weren't there before.
+    func newWindows(after action: () -> Void) -> [NSWindow] {
+        let before = Set(NSApplication.shared.windows.map(ObjectIdentifier.init))
+        action()
+        RunLoop.current.run(until: .now + 0.3)
+        return NSApplication.shared.windows.filter { !before.contains(ObjectIdentifier($0)) }
+    }
+
+    @Test func completionOpensNoWindow() {
+        let (panel, editor, store) = hostedEditor()
+        defer { panel.orderOut(nil) }
+        editor.setSelectedRange(NSRange(location: 3, length: 0))
+        #expect(newWindows { editor.complete(nil) }.isEmpty)
+        #expect(editor.string == "hello world" && store.text == "hello world")
+    }
+
+    @Test func forceClickLookUpOpensNoWindow() throws {
+        let (panel, editor, _) = hostedEditor()
+        defer { panel.orderOut(nil) }
         let click = try #require(
             NSEvent.mouseEvent(
-                with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
-                windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
-        e.quickLook(with: click)
-        #expect(e.string == "hel" && store.text == "hel")
+                with: .leftMouseDown, location: CGPoint(x: 5, y: 5), modifierFlags: [],
+                timestamp: 0, windowNumber: panel.windowNumber, context: nil, eventNumber: 0,
+                clickCount: 1, pressure: 1))
+        #expect(newWindows { editor.quickLook(with: click) }.isEmpty)
+    }
+
+    @Test func showDefinitionOpensNoWindow() {
+        // ⌃⌘D and the Look Up menu item end up here.
+        let (panel, editor, _) = hostedEditor()
+        defer { panel.orderOut(nil) }
+        let word = NSAttributedString(string: "hello")
+        #expect(newWindows { editor.showDefinition(for: word, at: .zero) }.isEmpty)
+        #expect(
+            newWindows {
+                editor.showDefinition(
+                    for: editor.attributedString(), range: NSRange(location: 0, length: 5),
+                    options: nil, baselineOriginProvider: nil)
+            }.isEmpty)
     }
 
     @Test func typingGoesToTheStore() {

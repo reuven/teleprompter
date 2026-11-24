@@ -232,7 +232,8 @@ final class NotesContentView: NSView, NSTextViewDelegate {
 /// Why: the notes panel is hidden from capture, but Look Up popovers, Services, Writing Tools,
 /// spelling suggestions and completion lists are separate windows (some in other processes, out
 /// of `CaptureShield`'s reach) that quote the text, so they could appear in a recording. The
-/// context menu keeps only Cut, Copy, Paste and Select All; completion and Look Up do nothing.
+/// context menu keeps only Cut, Copy, Paste and Select All; completion and every Look Up entry
+/// point (force click, three-finger tap, ⌃⌘D) do nothing.
 final class NotesEditor: NSTextView {
     /// Only clipboard editing; no Look Up, Search, Services, Writing Tools or spelling items.
     override func menu(for event: NSEvent) -> NSMenu? {
@@ -253,4 +254,17 @@ final class NotesEditor: NSTextView {
 
     /// No Look Up (force click, three-finger tap): its popover quotes the selected text.
     override func quickLook(with event: NSEvent) {}
+
+    /// No Look Up via ⌃⌘D or the Services path: it opens a highlight overlay window here and an
+    /// out-of-process popover showing a word of the notes.
+    override func showDefinition(
+        for attrString: NSAttributedString?, at textBaselineOrigin: NSPoint
+    ) {}
+
+    /// No Look Up for a range either (the form the text system itself uses).
+    override func showDefinition(
+        for attrString: NSAttributedString?, range targetRange: NSRange,
+        options: [NSView.DefinitionOptionKey: Any]? = nil,
+        baselineOriginProvider originProvider: ((NSRange) -> NSPoint)? = nil
+    ) {}
 }
