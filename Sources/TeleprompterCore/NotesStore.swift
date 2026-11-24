@@ -19,7 +19,9 @@ public enum NotesSource: Equatable, Sendable {
 /// typed or clobbering a file another editor just saved. So:
 /// - Edits are saved after a short debounce (`saveDelay`), always with atomic writes. A
 ///   failed save stays pending, so `flush()` or a source switch retries it; if it still
-///   can't be written when the source switches, it is dropped and `lastError` says so.
+///   can't be written when the source switches, an edit to a file is dropped and `lastError`
+///   says so, while scratch edits are kept in memory and saved by `flush()` or on returning
+///   to scratch.
 /// - An open file is watched; a change made by *another* program reloads `text` and calls
 ///   `onExternalChange`. Our own saves are recognized by their exact bytes and ignored.
 /// - Last write wins (accepted in the spec): if another program changes the file while one
@@ -46,12 +48,24 @@ public enum NotesSource: Equatable, Sendable {
     /// Where `text` came from and where edits go.
     public private(set) var source: NotesSource = .scratch
     /// A one-line, user-facing description of the last problem (naming the file, never
-    /// quoting its contents), or nil. Cleared by a successful open or reload.
-    public private(set) var lastError: String?
+    /// quoting its contents), or nil.
+    ///
+    /// Cleared by a successful open or reload, by `dismissError()`, and by a successful save
+    /// when the error was that save's own earlier failure (other errors stay until dismissed).
+    /// A problem that persists is raised again on the next attempt: a failed save sets it
+    /// every time, and blocked scratch saving (see the type's doc comment) re-raises it if the
+    /// user dismissed it, so a save that isn't happening never goes silent.
+    public private(set) var lastError: String? {
+        didSet { if lastError != oldValue { onErrorChange?() } }
+    }
     /// Called after `text` or `source` changed because of something outside the app (another
     /// program edited the file, or the file vanished), so the UI can refresh. Not called for
     /// changes the app made itself.
     public var onExternalChange: (() -> Void)?
+    /// Called whenever `lastError` changes, whatever the cause (including a debounced save
+    /// failing with no user action in progress), so the UI can show or hide the error at once.
+    /// Separate from `onExternalChange` because an error is not a change to the notes.
+    public var onErrorChange: (() -> Void)?
 
     private let scratchURL: URL
     private let saveDelay: Duration
@@ -59,6 +73,12 @@ public enum NotesSource: Equatable, Sendable {
     private var scratchText: String
     /// True when an unreadable scratch file couldn't be moved aside: saving would destroy it.
     private var scratchSavesDisabled = false
+    /// True when scratch edits couldn't be saved before a file was opened. `scratchText` still
+    /// holds them; they're saved by `flush()` or on returning to scratch.
+    private var scratchUnsaved = false
+    /// The message the last failed save put in `lastError`, so a later successful save clears
+    /// that message and only that one.
+    private var saveFailureMessage: String?
     /// The text not yet written (waiting for the debounce, failed, or held), and where it
     /// must be written.
     private var pending: (target: NotesSource, text: String)?
@@ -118,6 +138,12 @@ public enum NotesSource: Equatable, Sendable {
         }
     }
 
+    /// Clears `lastError` once the user has seen it. A problem that is still there comes back on
+    /// the next attempt (see `lastError`).
+    public func dismissError() {
+        lastError = nil
+    }
+
     /// Stops using the open file and returns to scratch notes, as they were last saved.
     /// Any pending edit to the file is saved first (or reported if it can't be).
     public func closeFile() {
@@ -148,6 +174,9 @@ public enum NotesSource: Equatable, Sendable {
     /// the last keystrokes are not lost to the debounce, and by tests.
     public func flush() async {
         savePendingNow()
+        if scratchUnsaved, writeScratch(Data(scratchText.utf8)) {
+            scratchUnsaved = false
+        }
     }
 
     // MARK: - Saving
@@ -161,26 +190,52 @@ public enum NotesSource: Equatable, Sendable {
         let data = Data(save.text.utf8)
         switch save.target {
         case .scratch:
-            guard !scratchSavesDisabled else { return }
-            do {
-                try FileManager.default.createDirectory(
-                    at: scratchURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try data.write(to: scratchURL, options: .atomic)
-                pending = nil
-            } catch {
-                lastError = "Couldn't save “\(scratchURL.lastPathComponent)”."
-            }
+            if writeScratch(data) { pending = nil }
         case .file(let url):
             guard !fileSavesSuspended else { return }
             do {
                 try data.write(to: url, options: .atomic)
                 knownFileBytes = data
                 pending = nil
+                saveSucceeded()
             } catch {
-                lastError = "Couldn't save “\(url.lastPathComponent)”."
+                saveFailed("Couldn't save “\(url.lastPathComponent)”.")
             }
         }
     }
+
+    /// Writes scratch notes, creating the folder on first use. Returns whether it worked;
+    /// failures (and blocked saving) are reported in `lastError`.
+    private func writeScratch(_ data: Data) -> Bool {
+        guard !scratchSavesDisabled else {
+            // Keep the fuller launch message if it's still up; re-raise once it's dismissed.
+            if lastError == nil { lastError = Self.scratchBlocked }
+            return false
+        }
+        do {
+            try FileManager.default.createDirectory(
+                at: scratchURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: scratchURL, options: .atomic)
+            saveSucceeded()
+            return true
+        } catch {
+            saveFailed("Couldn't save “\(scratchURL.lastPathComponent)”.")
+            return false
+        }
+    }
+
+    private func saveFailed(_ message: String) {
+        lastError = message
+        saveFailureMessage = message
+    }
+
+    /// A save worked, so its own earlier failure message is out of date.
+    private func saveSucceeded() {
+        if let stale = saveFailureMessage, lastError == stale { lastError = nil }
+        saveFailureMessage = nil
+    }
+
+    private static let scratchBlocked = "Scratch notes can't be saved until you relaunch."
 
     /// Drops any pending save without writing it.
     private func cancelPendingSave() {
@@ -189,17 +244,29 @@ public enum NotesSource: Equatable, Sendable {
         pending = nil
     }
 
-    /// Called when leaving a source after trying to save: drops what couldn't be written
-    /// and returns a message saying so, or nil if nothing was lost.
+    /// Called when leaving a source after trying to save: drops the pending save that couldn't
+    /// be written and returns a message saying what happened to it, or nil if nothing was
+    /// pending.
+    ///
+    /// Edits to a file are discarded. Scratch edits are not: `scratchText` still holds them,
+    /// so they're marked unsaved and saved later (see `scratchUnsaved`), and the message says
+    /// they were kept.
     private func dropUnsavedEdits() -> String? {
         guard let save = pending else { return nil }
         cancelPendingSave()
-        let name =
-            switch save.target {
-            case .scratch: scratchURL.lastPathComponent
-            case .file(let url): url.lastPathComponent
-            }
-        return "Changes to “\(name)” couldn't be saved and were discarded."
+        switch save.target {
+        case .scratch:
+            scratchUnsaved = true
+            let message =
+                scratchSavesDisabled
+                ? "\(Self.scratchBlocked) Your scratch edits are kept until you quit."
+                : "Couldn't save scratch notes. They're kept, and saved when you close this file or quit."
+            // Stale once the kept edits are saved, like any failed save's message.
+            saveFailureMessage = message
+            return message
+        case .file(let url):
+            return "Changes to “\(url.lastPathComponent)” couldn't be saved and were discarded."
+        }
     }
 
     private func switchToScratch() {
@@ -209,6 +276,11 @@ public enum NotesSource: Equatable, Sendable {
         fileSavesSuspended = false
         source = .scratch
         text = scratchText
+        if scratchUnsaved {
+            scratchUnsaved = false
+            pending = (.scratch, scratchText)
+            savePendingNow()
+        }
     }
 
     /// Renames an unreadable scratch file to `<name>.unreadable-<yyyyMMdd-HHmmss>` so the

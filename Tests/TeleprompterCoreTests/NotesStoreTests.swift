@@ -425,7 +425,133 @@ private func contents(_ url: URL) throws -> String {
         store.open(try makeFile("f"))
         #expect(store.source == .file(dir.appendingPathComponent("talk.md")))
         let error = try #require(store.lastError)
-        #expect(error.contains("scratch.md") && error.contains("discarded"))
+        #expect(
+            error.contains("relaunch") && error.contains("kept") && !error.contains("discarded"))
+        store.closeFile()
+        #expect(store.text == "scratch typing", "scratch edits stay in the app")
+    }
+
+    /// A scratch folder that can't be written to (the scratch file doesn't exist yet), plus a
+    /// way to make it writable again.
+    func lockScratchFolder() throws -> () throws -> Void {
+        let support = scratchURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o555], ofItemAtPath: support.path)
+        return {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: support.path)
+        }
+    }
+
+    @Test func openSaysUnsavedScratchEditsAreKeptAndCloseFileSavesThem() async throws {
+        let unlockScratch = try lockScratchFolder()
+        let store = makeStore(saveDelay: .seconds(30))
+        store.userEdited("scratch typing")
+        store.open(try makeFile("f"))
+        let error = try #require(store.lastError)
+        #expect(
+            error.contains("scratch notes") && error.contains("kept")
+                && !error.contains("discarded"))
+        try unlockScratch()
+        store.closeFile()
+        #expect(store.text == "scratch typing")
+        #expect(try contents(scratchURL) == "scratch typing")
+        #expect(store.lastError == nil, "the save that succeeded clears its own error")
+    }
+
+    @Test func flushSavesKeptScratchEditsWhileAFileIsOpen() async throws {
+        let unlockScratch = try lockScratchFolder()
+        let store = makeStore(saveDelay: .seconds(30))
+        store.userEdited("scratch typing")
+        let file = try makeFile("f")
+        store.open(file)
+        await store.flush()
+        #expect(store.lastError != nil, "still can't be saved")
+        try unlockScratch()
+        await store.flush()
+        #expect(try contents(scratchURL) == "scratch typing")
+        #expect(store.source == .file(file) && store.text == "f")
+        await store.flush()
+        #expect(try contents(scratchURL) == "scratch typing", "saved once, not again")
+    }
+
+    @Test func keptScratchEditsAreSavedWhenTheOpenFileVanishes() async throws {
+        let unlockScratch = try lockScratchFolder()
+        let store = makeStore(saveDelay: .seconds(30))
+        store.userEdited("scratch typing")
+        let file = try makeFile("f")
+        store.open(file)
+        try unlockScratch()
+        try FileManager.default.removeItem(at: file)
+        #expect(await waitUntil { store.source == .scratch })
+        #expect(try contents(scratchURL) == "scratch typing")
+        #expect(store.lastError?.contains("talk.md") == true)
+    }
+
+    // MARK: - Error lifecycle
+
+    @Test func dismissErrorClearsItAndNotifiesOnlyOnRealChanges() throws {
+        let store = makeStore()
+        var notified = 0
+        store.onErrorChange = { notified += 1 }
+        store.dismissError()
+        #expect(notified == 0, "no change, no call")
+        store.open(dir.appendingPathComponent("nowhere.md"))
+        #expect(notified == 1)
+        store.open(dir.appendingPathComponent("nowhere.md"))
+        #expect(notified == 1, "the same message again is not a change")
+        store.dismissError()
+        #expect(store.lastError == nil && notified == 2)
+        #expect(changes.count == 0, "errors are not external note changes")
+    }
+
+    @Test func successfulScratchSaveClearsTheStaleSaveError() async throws {
+        let unlockScratch = try lockScratchFolder()
+        let store = makeStore()
+        store.userEdited("a")
+        await store.flush()
+        #expect(store.lastError != nil)
+        try unlockScratch()
+        store.userEdited("ab")
+        await store.flush()
+        #expect(store.lastError == nil)
+    }
+
+    @Test func successfulFileSaveClearsTheStaleSaveError() async throws {
+        let store = makeStore()
+        let locked = try openLockedFile(store)
+        store.userEdited("new")
+        await store.flush()
+        #expect(store.lastError != nil)
+        try unlock(locked)
+        await store.flush()
+        #expect(store.lastError == nil)
+    }
+
+    @Test func successfulSaveLeavesOtherErrorsAlone() async throws {
+        let store = makeStore()
+        store.open(dir.appendingPathComponent("nowhere.md"))
+        let error = try #require(store.lastError)
+        store.userEdited("typed")
+        await store.flush()
+        #expect(try contents(scratchURL) == "typed")
+        #expect(store.lastError == error, "only a save's own error goes stale when it succeeds")
+    }
+
+    @Test func blockedScratchSaveIsRaisedAgainAfterDismissal() async throws {
+        let blocker = try makeFile("x", name: "blocker")
+        let store = NotesStore(
+            scratchURL: blocker.appendingPathComponent("scratch.md"), saveDelay: .milliseconds(10))
+        let launchError = try #require(store.lastError)
+        store.userEdited("typed")
+        await store.flush()
+        #expect(store.lastError == launchError, "the fuller launch message is not replaced")
+        store.dismissError()
+        store.userEdited("typed more")
+        await store.flush()
+        let error = try #require(store.lastError)
+        #expect(error.contains("relaunch"))
     }
 
     @Test func failedSaveIsKeptWhenOpenFails() async throws {
