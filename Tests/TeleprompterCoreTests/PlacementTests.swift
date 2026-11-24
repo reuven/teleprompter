@@ -65,6 +65,21 @@ private let external = ScreenInfo(
     #expect(Placement.restoredFrame(saved: straddle, screens: [builtIn, gap]) == nil)
 }
 
+@Test func tooSmallFrameGrowsToTheMinimumKeepingItsTopLeft() {
+    let saved = CGRect(x: 100, y: 500, width: 50, height: 20)
+    let r = Placement.restoredFrame(saved: saved, screens: [builtIn])
+    #expect(r == CGRect(x: 100, y: 440, width: 200, height: 80))
+    // Only the short side grows.
+    let wide = CGRect(x: 100, y: 500, width: 600, height: 20)
+    #expect(
+        Placement.restoredFrame(saved: wide, screens: [builtIn])
+            == CGRect(x: 100, y: 440, width: 600, height: 80))
+}
+
+@Test func minimumSizeIsSmallButReadable() {
+    #expect(Placement.minimumSize == CGSize(width: 200, height: 80))
+}
+
 @Test func corruptFramesAreNil() {
     let bad: [CGRect] = [
         CGRect(x: 100, y: 100, width: 0, height: 200),
@@ -87,7 +102,10 @@ private let external = ScreenInfo(
         let saved = CGRect(x: x, y: y, width: w, height: h)
         let screens = both ? [builtIn, external] : [builtIn]
         if let r = Placement.restoredFrame(saved: saved, screens: screens) {
-            #expect(r == saved)
+            #expect(r.width >= Placement.minimumSize.width)
+            #expect(r.height >= Placement.minimumSize.height)
+            #expect(r.minX == saved.minX && r.maxY == saved.maxY, "top-left corner kept")
+            #expect(r.width == max(saved.width, 200) && r.height == max(saved.height, 80))
             #expect(
                 screens.contains {
                     let i = $0.visibleFrame.intersection(r)

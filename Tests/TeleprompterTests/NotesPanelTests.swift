@@ -43,6 +43,13 @@ import Testing
     #expect(p.styleMask.contains(.borderless) && p.styleMask.contains(.resizable))
 }
 
+@MainActor @Test func panelCannotBeResizedBelowTheMinimum() {
+    // Small enough to lose the text, but no smaller: the padding alone takes 40 × 40.
+    let p = NotesPanel(settings: Settings())
+    #expect(p.contentMinSize == CGSize(width: 200, height: 80))
+    #expect(p.contentMinSize == Placement.minimumSize)
+}
+
 @MainActor @Test func showsItsContentInsetByPaddingAndResizesIt() {
     let content = NSView()
     let p = NotesPanel(settings: Settings(), content: content)

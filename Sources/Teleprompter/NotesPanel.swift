@@ -55,6 +55,8 @@ final class NotesPanel: NSPanel {
             defer: false)
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // A resize can't shrink the panel to a sliver that's hard to find and grab again.
+        contentMinSize = Placement.minimumSize
         isMovableByWindowBackground = true
         hidesOnDeactivate = false
         sharingType = .none

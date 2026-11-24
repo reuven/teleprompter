@@ -24,6 +24,10 @@ public enum Placement {
     /// The notes window's size when there is no remembered frame.
     public static let defaultSize = CGSize(width: 640, height: 200)
 
+    /// The smallest the notes window may be (its content size; the panel is borderless). Below
+    /// this, the 20-point padding leaves almost no room for text and the window is easy to lose.
+    public static let minimumSize = CGSize(width: 200, height: 80)
+
     /// Gap between the top of the visible area and the window, clearing the
     /// menu bar and notch.
     private static let topMargin: CGFloat = 8
@@ -48,13 +52,22 @@ public enum Placement {
     /// its area lies within one screen's visible frame. This guards against a
     /// disconnected display stranding the window off-screen. Corrupt frames
     /// (non-finite or empty) yield nil, since stored settings are not validated.
+    ///
+    /// A frame smaller than `minimumSize` is grown to it, keeping its top-left corner, before
+    /// the on-screen check. Clamped rather than rejected: the window's minimum size stops the
+    /// user making it that small, so such a frame came from an edited or older settings file,
+    /// and its position is still the best guess at where the user wants the notes (the top
+    /// edge is what sits under the camera).
     public static func restoredFrame(saved: CGRect?, screens: [ScreenInfo]) -> CGRect? {
-        guard let saved,
-            [saved.origin.x, saved.origin.y, saved.size.width, saved.size.height].allSatisfy(
+        guard let raw = saved,
+            [raw.origin.x, raw.origin.y, raw.size.width, raw.size.height].allSatisfy(
                 \.isFinite),
             // `size` is the raw value; `width`/`height` would hide a negative one.
-            saved.size.width > 0, saved.size.height > 0
+            raw.size.width > 0, raw.size.height > 0
         else { return nil }
+        let width = max(raw.size.width, minimumSize.width)
+        let height = max(raw.size.height, minimumSize.height)
+        let saved = CGRect(x: raw.minX, y: raw.maxY - height, width: width, height: height)
         let area = saved.width * saved.height
         let onScreen = screens.contains { screen in
             let overlap = screen.visibleFrame.intersection(saved)
