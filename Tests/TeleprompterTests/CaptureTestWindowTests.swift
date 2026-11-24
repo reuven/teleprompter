@@ -71,7 +71,7 @@ private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
     let w = CaptureTestWindow(near: .zero, within: screen)
     #expect(
         w.textLabel.stringValue
-            == "TEST — this red box SHOULD appear in your recording. Your notes (above) should not."
+            == "TEST — this red box SHOULD appear in your recording. Your notes panel next to it should not."
     )
     let content = try #require(w.contentView)
     #expect(!descendants(of: content).contains { $0 is NotesContentView || $0 is NSTextView })

@@ -14,9 +14,10 @@ import TeleprompterCore
 final class CaptureTestWindow: NSPanel {
     /// Vertical gap between the notes panel and this window, in points.
     static let gap: CGFloat = 8
-    /// The only text this window ever shows.
+    /// The only text this window ever shows. It says "next to it", not "above": the box flips
+    /// above the panel when there's no room below (see `frame(near:within:)`).
     static let text =
-        "TEST — this red box SHOULD appear in your recording. Your notes (above) should not."
+        "TEST — this red box SHOULD appear in your recording. Your notes panel next to it should not."
     /// Width of the red border, in points.
     static let borderWidth: CGFloat = 4
 
