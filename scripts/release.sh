@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds the release zip for VERSION and prints its SHA-256 and the `gh release create` command
-# (printed, never run: publishing is a deliberate manual step).
+# Runs the coverage gate, then builds the release zip for VERSION and prints its SHA-256 and the
+# `gh release create` command (printed, never run: publishing is a deliberate manual step).
 # The zip holds one folder, Teleprompter-VERSION/, with Teleprompter.app, LICENSE and
 # THIRD_PARTY_NOTICES.md (the licenses of the statically linked libraries must ship with it).
 # Usage: scripts/release.sh VERSION [--dry-run]   (VERSION as N.N.N; --dry-run in any position)
@@ -35,6 +35,10 @@ if [ "$dry_run" = 0 ]; then
 else
   echo "DRY RUN: branch and tag checks skipped"
 fi
+
+# The full test suite and the 100% coverage gate, on exactly this tree, in dry runs too. Run as its
+# own command so `set -e` stops the release on its exit status (no pipe or && chain to hide it).
+scripts/coverage.sh
 
 rm -rf dist
 mkdir dist
