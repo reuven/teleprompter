@@ -86,8 +86,9 @@ final class NotesPanel: NSPanel {
             }
             // This panel's own chain, from its focused view: `NSApp.sendAction(_:to: nil, …)`
             // would pick the app's key window, which need not be this panel.
-            if let action = Self.editingAction(for: event),
-                (firstResponder ?? self).tryToPerform(action, with: self)
+            // (A window's first responder is the window itself when no view has focus.)
+            if let action = Self.editingAction(for: event), let responder = firstResponder,
+                responder.tryToPerform(action, with: self)
             {
                 return true
             }

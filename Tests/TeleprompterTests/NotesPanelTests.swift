@@ -216,8 +216,13 @@ import Testing
     let p = NotesPanel(settings: Settings(), content: content)
     p.mode = .edit
     #expect(p.makeFirstResponder(content.editor))
+    // Explicit grouping: event-based grouping would leave a run-loop observer behind that
+    // closes the group later, inside whichever test spins the run loop next.
+    let undo = try #require(content.editor.undoManager)
+    undo.groupsByEvent = false
+    undo.beginUndoGrouping()
     content.editor.insertText("hello", replacementRange: NSRange(location: 0, length: 0))
-    content.editor.undoManager?.endUndoGrouping()
+    undo.endUndoGrouping()
     #expect(p.performKeyEquivalent(with: key("a")))
     #expect(content.editor.selectedRange() == NSRange(location: 0, length: 5))
     #expect(p.performKeyEquivalent(with: key("z")))

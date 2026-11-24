@@ -35,10 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // The latest capture warning; sticky until relaunch (see checkPanelHidden).
     private var captureWarningText: String?
     private var shortcutUnavailable = false
-    // Saves the frame once a move or resize has settled, not on every intermediate event.
-    private var frameSaveTask: Task<Void, Never>?
-    /// How long the frame must stay still before it's saved.
-    static let frameSaveDelay: Duration = .milliseconds(500)
+    // Saves the frame once a move or resize settles; ignores moves caused by display changes.
+    private lazy var frameSaver = FrameSaver(
+        delay: .milliseconds(500), quietAfterScreenChange: .seconds(1)
+    ) { [weak self] in self?.saveFrame() }
+    private var screenObserver: NSObjectProtocol?
 
     /// Where scratch notes live: `~/Library/Application Support/Teleprompter/scratch.md`. The
     /// store creates the folder on the first save.
@@ -57,8 +58,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let store = NotesStore(scratchURL: Self.scratchURL())
         // The last file only if it's still there; otherwise scratch, quietly.
-        let exists = { (url: URL) in FileManager.default.fileExists(atPath: url.path) }
-        if let url = settings.launchFile(exists: exists) { store.open(url) }
+        // A folder or unreadable file at that path counts as gone.
+        if let url = settings.launchFile(exists: NotesStore.isOpenableFile) { store.open(url) }
         self.store = store
         recordSource()
         modeState = ModeState.initial(hasNotes: !store.text.isEmpty)
@@ -73,6 +74,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Set after placement so the launch position isn't saved as if the user had moved it.
         panel.delegate = self
         panel.onTextSizeStep = { [weak self] in self?.stepTextSize($0) }
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.frameSaver.screenParametersChanged() }
+        }
         panel.orderFrontRegardless()
         self.panel = panel
         // Launching never takes focus: an empty-notes launch is in edit mode and clickable, but
@@ -133,15 +139,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     ///
     /// Also saves the panel's frame now if a move or resize is still waiting out the save delay.
     /// Only then: an untouched launch position isn't saved as if the user had chosen it.
+    ///
+    /// If notes still couldn't be written after that, asks first (see `QuitDecision`): Cancel,
+    /// the default, keeps the app running with the notes still in memory.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if let frameSaveTask {
-            frameSaveTask.cancel()
-            saveFrame()
-        }
+        frameSaver.flush()
         guard let store else { return .terminateNow }
         Task {
             await store.flush()
-            NSApp.reply(toApplicationShouldTerminate: true)
+            let quit = QuitDecision.shouldQuit(hasUnsavedChanges: store.hasUnsavedChanges) {
+                // The alert must be in front to be answered, so the app activates for it.
+                NSApp.activate()
+                return QuitDecision.makeAlert(detail: store.lastError).runModal()
+            }
+            NSApp.reply(toApplicationShouldTerminate: quit)
         }
         return .terminateLater
     }
@@ -157,16 +168,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func panelFrameChanged() {
         guard let panel else { return }
         testWindow?.follow(panel.frame, within: visibleFrame(of: panel))
-        frameSaveTask?.cancel()
-        frameSaveTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.frameSaveDelay)
-            guard !Task.isCancelled else { return }
-            self?.saveFrame()
-        }
+        frameSaver.frameChanged()
     }
 
     private func saveFrame() {
-        frameSaveTask = nil
         guard let panel else { return }
         settings.windowFrame = panel.frame
         settingsStore.save(settings)
@@ -189,7 +194,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func recordSource() {
         guard let store else { return }
         let url: URL? = if case .file(let url) = store.source { url } else { nil }
-        guard url != settings.lastFileURL else { return }
+        // Settings keep URLs canonical, so compare in that form.
+        guard url.map(Settings.canonical) != settings.lastFileURL else { return }
         if let url { settings.noteOpened(url) } else { settings.lastFileURL = nil }
         settingsStore.save(settings)
     }
@@ -213,6 +219,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let dialog = NSOpenPanel()
         chooser.configure(dialog)
         NSApp.activate()
+        // Ordered front explicitly too: if activation is refused, it must not open behind.
+        dialog.orderFrontRegardless()
         let response = withExtendedLifetime(chooser) { dialog.runModal() }
         if response == .OK, let url = dialog.url { openFile(url) }
         if modeState.mode == .recording {
