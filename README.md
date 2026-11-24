@@ -46,7 +46,7 @@ ad hoc.
   stops it taking focus, so your typing and clicks go to the app underneath.
 - In edit mode, drag the panel by its edge margin (the dark border around the text).
 - **⌃⌥⌘N** (the physical N key, so it works with any input source) toggles between the two
-  from any app. If another app owns that shortcut, the menu says "Shortcut ⌃⌥⌘N unavailable".
+  from any app. If macOS refuses to register the shortcut, the menu says "Shortcut ⌃⌥⌘N unavailable" (on macOS 26, another app using the same keys usually doesn't cause that, so if ⌃⌥⌘N triggers something else too, use the menu instead).
 - Notes are Markdown. In recording mode, headings, lists (including nested and numbered),
   bold, italic, and inline code render. Quotes, tables, links, and images show as plain text: a
   quote's text without its marker, a table's cells separated by tabs, a link's text without its
