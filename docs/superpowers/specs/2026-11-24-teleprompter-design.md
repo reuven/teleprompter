@@ -96,6 +96,8 @@ Reuven chose Swift. The initial Python `uv` scaffold was removed.
   the background) and resized.
 - Shows the raw Markdown in a plain text editor (monospaced or system font,
   builder's choice) so he can type or paste.
+- Raw text is shown at a fixed, comfortable size and scrolls; it is never
+  shrunk-to-fit while typing (Reuven's decision, 2026-11-24).
 
 **Recording mode**
 - Shows the Markdown rendered: headings, bullets (including nesting), numbered
@@ -103,6 +105,10 @@ Reuven chose Swift. The initial Python `uv` scaffold was removed.
 - Click-through (`ignoresMouseEvents`) and never becomes key or main; never
   activates the app.
 - Text is not editable.
+- Re-fits from the maximum font size whenever the text or window size changes,
+  so text grows back as well as shrinks. When the open file changes on disk,
+  the view reloads and re-fits immediately, even while recording (Reuven's
+  decision, 2026-11-24).
 
 **Switching:** one global keyboard shortcut that works from any app, plus a
 menu-bar item. Default shortcut *my call*: ⌃⌥⌘N (chosen to avoid common app

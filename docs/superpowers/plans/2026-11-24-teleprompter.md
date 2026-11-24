@@ -513,8 +513,8 @@ Run `testslot -- swift test --filter NotesPanelTests`. Expected: FAIL (`NotesPan
 - Consumes: `NotesStore`, `MarkdownRenderer`, `TextFitter`, `ModeState`, `Settings`
 - Produces:
   - `final class NotesContentView: NSView`
-    - In edit mode: an `NSTextView` showing raw text. On each change it calls `store.userEdited`.
-    - In recording mode: a non-editable view showing `MarkdownRenderer.render(text, style: NoteStyle(fontSize: fit.fontSize))`, where `fit = TextFitter.fit(text, maxFontSize: settings.fontSize, in: contentBounds)`. It re-fits when the bounds or text change. If `fit.overflows`, it shows a "▼ more below" badge pinned to the bottom edge.
+    - In edit mode: an `NSTextView` in a scroll view showing raw text at a fixed size (`max(18, settings.fontSize × 0.6)`, monospaced); no shrink-to-fit while typing. On each change it calls `store.userEdited`.
+    - In recording mode: a non-editable view showing `MarkdownRenderer.render(text, style: NoteStyle(fontSize: fit.fontSize))`, where `fit = TextFitter.fit(text, maxFontSize: settings.fontSize, in: contentBounds)`. It re-fits from `settings.fontSize` (never from the current size) when the bounds or text change, so text grows back as well as shrinks. `store.onExternalChange` triggers a re-render and re-fit immediately, in either mode. All rendering/fitting runs on the main actor (`MarkdownRenderer` and `TextFitter` are `@MainActor`). The drawn geometry must match the measurement: pass `fit` the content size minus insets, and use `lineFragmentPadding = 0` and no `textContainerInset` (or subtract them). If `fit.overflows`, it shows a "▼ more below" badge pinned to the bottom edge.
   - `final class HotKey { init?(keyCode: UInt32, modifiers: UInt32, handler: @escaping () -> Void) }`. Returns nil if registration fails; the menu then shows "Shortcut unavailable".
   - The toggle (hotkey or menu): `modeState.toggleMode()`, then the panel's mode, then `panel.setCaptureVisible(false)`, then the content view's mode. Entering edit makes the panel key. Leaving edit calls `makeFirstResponder(nil)`, resigns key, and does `previousApp?.activate()` if the app ever became active.
 
