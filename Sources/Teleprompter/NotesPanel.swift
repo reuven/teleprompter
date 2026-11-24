@@ -74,13 +74,44 @@ final class NotesPanel: NSPanel {
     /// Never main: the panel is an accessory and must not demote the app being recorded.
     override var canBecomeMain: Bool { false }
 
-    /// Handles ⌘+ / ⌘− in edit mode (see `onTextSizeStep`); everything else goes to AppKit.
+    /// Handles, in edit mode only, ⌘+ / ⌘− (see `onTextSizeStep`) and the editing shortcuts
+    /// (see `editingAction`), which go up the responder chain from the focused view (the
+    /// editor) as the Edit menu would send them. An editing shortcut nobody handles, and
+    /// everything else, goes to AppKit.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if mode == .edit, let step = Self.textSizeStep(for: event) {
-            onTextSizeStep?(step)
-            return true
+        if mode == .edit {
+            if let step = Self.textSizeStep(for: event) {
+                onTextSizeStep?(step)
+                return true
+            }
+            // This panel's own chain, from its focused view: `NSApp.sendAction(_:to: nil, …)`
+            // would pick the app's key window, which need not be this panel.
+            if let action = Self.editingAction(for: event),
+                (firstResponder ?? self).tryToPerform(action, with: self)
+            {
+                return true
+            }
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    /// The editing action for ⌘X / ⌘C / ⌘V / ⌘A / ⌘Z (Command alone) or ⌘⇧Z, or nil.
+    ///
+    /// Why the panel maps these itself: these shortcuts normally come from the main menu's Edit
+    /// menu, but the app deliberately has no main menu, because AppKit adds Writing Tools,
+    /// Dictation and Emoji & Symbols to an Edit menu, and those open out-of-process windows
+    /// that quote the notes.
+    static func editingAction(for event: NSEvent) -> Selector? {
+        let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        switch (flags, event.charactersIgnoringModifiers?.lowercased()) {
+        case (.command, "x"): return #selector(NSText.cut(_:))
+        case (.command, "c"): return #selector(NSText.copy(_:))
+        case (.command, "v"): return #selector(NSText.paste(_:))
+        case (.command, "a"): return #selector(NSText.selectAll(_:))
+        case (.command, "z"): return Selector(("undo:"))
+        case ([.command, .shift], "z"): return Selector(("redo:"))
+        default: return nil
+        }
     }
 
     /// +1 for ⌘= / ⌘+ (main keyboard or keypad), −1 for ⌘−, nil for anything else. Shift is

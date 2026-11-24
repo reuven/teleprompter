@@ -165,3 +165,71 @@ import Testing
     #expect(p.backgroundView.layer?.backgroundColor?.alpha == 0.5)
     #expect(p.sharingType == .none)
 }
+
+/// Records the editing actions that reach it through the responder chain.
+@MainActor private final class EditSpy: NSView {
+    var received: [String] = []
+    override var acceptsFirstResponder: Bool { true }
+    @objc func cut(_ sender: Any?) { received.append("cut:") }
+    @objc func copy(_ sender: Any?) { received.append("copy:") }
+    @objc func paste(_ sender: Any?) { received.append("paste:") }
+    @objc override func selectAll(_ sender: Any?) { received.append("selectAll:") }
+    @objc func undo(_ sender: Any?) { received.append("undo:") }
+    @objc func redo(_ sender: Any?) { received.append("redo:") }
+}
+
+@MainActor @Test func editingShortcutsReachTheFocusedViewInEditModeOnly() {
+    let spy = EditSpy()
+    let p = NotesPanel(settings: Settings(), content: spy)
+    p.mode = .edit
+    #expect(p.makeFirstResponder(spy))
+    for chars in ["x", "c", "v", "a", "z"] {
+        #expect(p.performKeyEquivalent(with: key(chars)), "⌘\(chars)")
+    }
+    #expect(p.performKeyEquivalent(with: key("Z", [.command, .shift])), "⌘⇧Z")
+    #expect(spy.received == ["cut:", "copy:", "paste:", "selectAll:", "undo:", "redo:"])
+
+    // Option or Control turn them into other shortcuts; recording mode handles none.
+    #expect(!p.performKeyEquivalent(with: key("c", [.command, .option])))
+    #expect(!p.performKeyEquivalent(with: key("v", [.command, .control])))
+    p.mode = .recording
+    for chars in ["x", "c", "v", "a", "z"] {
+        #expect(!p.performKeyEquivalent(with: key(chars)), "⌘\(chars) in recording")
+    }
+    #expect(spy.received.count == 6)
+}
+
+@MainActor @Test func editingShortcutNobodyHandlesIsNotSwallowed() {
+    let p = NotesPanel(settings: Settings(), content: NSView())
+    p.mode = .edit
+    p.makeFirstResponder(nil)
+    #expect(!p.performKeyEquivalent(with: key("x")), "nothing can cut: left to AppKit")
+}
+
+@MainActor @Test func editingShortcutsWorkOnTheRealEditor() throws {
+    let dir = FileManager.default.temporaryDirectory.appending(path: "PanelEdit-\(UUID())")
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let store = NotesStore(scratchURL: dir.appending(path: "scratch.md"), saveDelay: .seconds(30))
+    let content = NotesContentView(
+        store: store, maxFontSize: 32, mode: .edit,
+        frame: CGRect(x: 0, y: 0, width: 600, height: 180))
+    let p = NotesPanel(settings: Settings(), content: content)
+    p.mode = .edit
+    #expect(p.makeFirstResponder(content.editor))
+    content.editor.insertText("hello", replacementRange: NSRange(location: 0, length: 0))
+    content.editor.undoManager?.endUndoGrouping()
+    #expect(p.performKeyEquivalent(with: key("a")))
+    #expect(content.editor.selectedRange() == NSRange(location: 0, length: 5))
+    #expect(p.performKeyEquivalent(with: key("z")))
+    #expect(content.editor.string.isEmpty, "⌘Z undid the typing")
+    #expect(p.performKeyEquivalent(with: key("Z", [.command, .shift])))
+    #expect(content.editor.string == "hello", "⌘⇧Z redid it")
+}
+
+@MainActor @Test func editingActionTable() {
+    #expect(NotesPanel.editingAction(for: key("c")) == #selector(NSText.copy(_:)))
+    #expect(NotesPanel.editingAction(for: key("Z", [.command, .shift])) == Selector(("redo:")))
+    #expect(NotesPanel.editingAction(for: key("c", [.command, .shift])) == nil)
+    #expect(NotesPanel.editingAction(for: key("q")) == nil)
+    #expect(NotesPanel.editingAction(for: key("c", [])) == nil)
+}
