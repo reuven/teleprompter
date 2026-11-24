@@ -27,6 +27,11 @@ final class NotesPanel: NSPanel {
     /// The background's opacity, taken from settings; exposed so tests can check it.
     private(set) var backgroundAlpha: Double
 
+    /// Called with +1 or −1 when ⌘+ or ⌘− is pressed while the panel is key (edit mode). The app
+    /// delegate routes it to the same path as Larger/Smaller Text, which also works from the menu
+    /// in either mode. Needed because a menu-bar app has no main menu to carry these shortcuts.
+    var onTextSizeStep: ((Int) -> Void)?
+
     /// The rounded dark view behind the notes.
     let backgroundView: NSView
     /// What the panel shows: the notes view in the app, inset by `padding` and resized with the
@@ -68,6 +73,36 @@ final class NotesPanel: NSPanel {
 
     /// Never main: the panel is an accessory and must not demote the app being recorded.
     override var canBecomeMain: Bool { false }
+
+    /// Handles ⌘+ / ⌘− in edit mode (see `onTextSizeStep`); everything else goes to AppKit.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if mode == .edit, let step = Self.textSizeStep(for: event) {
+            onTextSizeStep?(step)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    /// +1 for ⌘= / ⌘+ (main keyboard or keypad), −1 for ⌘−, nil for anything else. Shift is
+    /// allowed (⌘+ is ⌘⇧= on most layouts); Option and Control are not, so other shortcuts are
+    /// left alone.
+    static func textSizeStep(for event: NSEvent) -> Int? {
+        let flags = event.modifierFlags.intersection([.command, .option, .control])
+        guard flags == .command else { return nil }
+        switch event.charactersIgnoringModifiers {
+        case "=", "+": return 1
+        case "-": return -1
+        default: return nil
+        }
+    }
+
+    /// Changes the background's opacity (Opacity menu) without rebuilding the panel. Only the
+    /// background color changes; the window's capture setting is never touched here.
+    func setOpacity(_ opacity: Double) {
+        backgroundAlpha = opacity
+        backgroundView.layer?.backgroundColor =
+            NSColor.black.withAlphaComponent(opacity).cgColor
+    }
 
     /// Brings the panel in line with `state`'s mode, moving focus with it.
     ///

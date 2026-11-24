@@ -70,11 +70,6 @@ import Testing
     #expect(p.mode == .recording && p.ignoresMouseEvents && p.firstResponder === p)
 }
 
-@MainActor @Test func modeMenuTitleOffersTheOtherMode() {
-    #expect(StatusMenu.modeTitle(for: .recording) == "Edit Notes")
-    #expect(StatusMenu.modeTitle(for: .edit) == "Lock for Recording")
-}
-
 @MainActor @Test func applyingEditStateAcceptsInput() {
     let p = NotesPanel(settings: Settings())
     var state = ModeState.initial(hasNotes: true)
@@ -128,4 +123,45 @@ import Testing
     toggled.toggleMode()
     p.apply(toggled, takeFocus: true)
     #expect(p.isKeyWindow)
+}
+
+/// A ⌘-key event as the panel would receive it.
+@MainActor private func key(_ chars: String, _ flags: NSEvent.ModifierFlags = .command) -> NSEvent {
+    NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0,
+        context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false,
+        keyCode: 0)!
+}
+
+@MainActor @Test func textSizeKeysAreCommandPlusAndMinusOnly() {
+    #expect(NotesPanel.textSizeStep(for: key("=")) == 1)
+    #expect(NotesPanel.textSizeStep(for: key("+", [.command, .shift])) == 1)
+    #expect(NotesPanel.textSizeStep(for: key("+", [.command, .numericPad])) == 1)
+    #expect(NotesPanel.textSizeStep(for: key("-")) == -1)
+    #expect(NotesPanel.textSizeStep(for: key("-", [.command, .numericPad])) == -1)
+    #expect(NotesPanel.textSizeStep(for: key("-", [])) == nil, "plain minus is typing")
+    #expect(NotesPanel.textSizeStep(for: key("=", [.command, .option])) == nil)
+    #expect(NotesPanel.textSizeStep(for: key("-", [.command, .control])) == nil)
+    #expect(NotesPanel.textSizeStep(for: key("c")) == nil)
+}
+
+@MainActor @Test func commandPlusAndMinusStepTextSizeInEditModeOnly() {
+    let p = NotesPanel(settings: Settings())
+    var steps: [Int] = []
+    p.onTextSizeStep = { steps.append($0) }
+    p.mode = .edit
+    #expect(p.performKeyEquivalent(with: key("=")))
+    #expect(p.performKeyEquivalent(with: key("-")))
+    #expect(!p.performKeyEquivalent(with: key("c")))
+    p.mode = .recording
+    #expect(!p.performKeyEquivalent(with: key("=")))
+    #expect(steps == [1, -1])
+}
+
+@MainActor @Test func opacityChangesTheBackgroundButNeverTheHiding() {
+    let p = NotesPanel(settings: Settings(opacity: 0.85))
+    p.setOpacity(0.5)
+    #expect(p.backgroundAlpha == 0.5)
+    #expect(p.backgroundView.layer?.backgroundColor?.alpha == 0.5)
+    #expect(p.sharingType == .none)
 }

@@ -2,8 +2,9 @@
 # Fails unless every file under Sources/TeleprompterCore/, plus the app files that decide whether
 # notes stay out of recordings (NotesPanel.swift, CaptureTestWindow.swift, CaptureCheck.swift),
 # plus the notes view, the global shortcut and the capture shield (NotesContentView.swift,
-# HotKey.swift, CaptureShield.swift), has 100% line coverage. AppDelegate, StatusMenu and
-# main.swift are thin AppKit glue, checked by hand.
+# HotKey.swift, CaptureShield.swift), plus every menu decision and the Open… filter
+# (MenuModel.swift, NotesFileChooser.swift), has 100% line coverage. AppDelegate, StatusMenu
+# and main.swift are thin AppKit glue, checked by hand.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -40,3 +41,5 @@ check CaptureCheck.swift "$(gate /Sources/Teleprompter/CaptureCheck.swift)"
 check NotesContentView.swift "$(gate /Sources/Teleprompter/NotesContentView.swift)"
 check HotKey.swift "$(gate /Sources/Teleprompter/HotKey.swift)"
 check CaptureShield.swift "$(gate /Sources/Teleprompter/CaptureShield.swift)"
+check MenuModel.swift "$(gate /Sources/Teleprompter/MenuModel.swift)"
+check NotesFileChooser.swift "$(gate /Sources/Teleprompter/NotesFileChooser.swift)"

@@ -3,115 +3,45 @@ import TeleprompterCore
 
 /// The menu-bar icon and its menu: the app's only visible control, since it has no Dock icon.
 ///
-/// Why a separate type: it keeps menu construction out of the app delegate and exposes plain
-/// closures, so later tasks can wire each item without touching the menu layout. Items with no
-/// handler yet have no action, so AppKit shows them disabled rather than pretending to work.
+/// Why a separate, thin type: every decision about the menu lives in `MenuModel` (pure and
+/// tested); this only owns the `NSStatusItem`, renders a model into it, tints the icon, and
+/// reports picks through one closure.
 @MainActor
-final class StatusMenu: NSObject {
-    /// Called when the user picks Show in Recordings (Test).
-    var onToggleCaptureVisible: () -> Void = {}
-    /// Called when the user picks Edit Notes / Lock for Recording.
-    var onToggleMode: () -> Void = {}
-    /// Called when the user picks Quit.
-    var onQuit: () -> Void = {}
+final class StatusMenu: NSObject, NSMenuDelegate {
+    /// Called with the action of whichever item the user picks.
+    var onAction: (MenuAction) -> Void = { _ in }
+    /// Called just before the menu opens, so state that changes without an event (a recent file
+    /// deleted in Finder) is current when the user looks.
+    var onWillOpen: () -> Void = {}
 
     private let statusItem: NSStatusItem
-    private let warningItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private let modeItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private let shortcutItem = NSMenuItem(
-        title: "Shortcut ⌃⌥⌘N unavailable", action: nil, keyEquivalent: "")
-    private let captureItem = NSMenuItem(
-        title: "Show in Recordings (Test)", action: nil, keyEquivalent: "")
+    private let menu = NSMenu()
 
-    /// Creates the status item in the system menu bar and builds its menu.
+    /// Creates the status item in the system menu bar, with an empty menu until `render`.
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
         statusItem.button?.image = NSImage(
             systemSymbolName: "text.bubble", accessibilityDescription: "Teleprompter")
-        statusItem.menu = buildMenu()
+        menu.delegate = self
+        statusItem.menu = menu
     }
+
+    /// AppKit's hook for refreshing a menu just before it's shown.
+    func menuNeedsUpdate(_ menu: NSMenu) { onWillOpen() }
 
     /// The menu-bar icon's own window, which `CaptureShield` and the stray-window check leave
     /// alone (by identity) so the icon behaves normally.
     var statusItemWindow: NSWindow? { statusItem.button?.window }
 
-    /// The mode item names the action it performs: the mode you'd switch to, not the current one.
-    static func modeTitle(for mode: Mode) -> String {
-        mode == .edit ? "Lock for Recording" : "Edit Notes"
+    /// Shows `model`: replaces the menu's items in place and tints the icon red while a warning
+    /// or error is showing, so a problem is visible without opening the menu.
+    func render(_ model: MenuModel) {
+        model.render(into: menu, target: self, action: #selector(pick(_:)))
+        statusItem.button?.contentTintColor = model.showsWarningTint ? .systemRed : nil
     }
 
-    /// Refreshes the mode item's title and the capture checkmark from `state`, so the menu always
-    /// matches the panel after any change.
-    func update(from state: ModeState) {
-        modeItem.title = Self.modeTitle(for: state.mode)
-        setCaptureVisible(state.captureVisible)
+    @objc private func pick(_ sender: NSMenuItem) {
+        if let action = MenuModel.action(of: sender) { onAction(action) }
     }
-
-    /// Puts `text` at the top of the menu (disabled) and tints the menu-bar icon red, so a failed
-    /// hiding check is visible without opening anything.
-    func showWarning(_ text: String) {
-        warningItem.title = text
-        warningItem.isHidden = false
-        statusItem.button?.contentTintColor = .systemRed
-    }
-
-    /// Adds a disabled "Shortcut ⌃⌥⌘N unavailable" item under the mode item, so a shortcut that
-    /// couldn't be registered (another app owns it) is visible instead of silently doing nothing.
-    func showShortcutUnavailable() {
-        shortcutItem.isHidden = false
-    }
-
-    /// Shows a checkmark next to Show in Recordings while the red test window is up, so the menu
-    /// always tells the truth about whether a recordable window is on screen.
-    func setCaptureVisible(_ on: Bool) {
-        captureItem.state = on ? .on : .off
-    }
-
-    private func buildMenu() -> NSMenu {
-        let menu = NSMenu()
-        warningItem.isEnabled = false
-        warningItem.isHidden = true
-        menu.addItem(warningItem)
-        modeItem.title = Self.modeTitle(for: .recording)
-        modeItem.action = #selector(toggleMode)
-        modeItem.target = self
-        menu.addItem(modeItem)
-        shortcutItem.isEnabled = false
-        shortcutItem.isHidden = true
-        menu.addItem(shortcutItem)
-        // Placeholders until Tasks 7 and 10 wire them; nil actions render disabled.
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Open…", action: nil, keyEquivalent: ""))
-        let recent = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
-        recent.submenu = NSMenu(title: "Open Recent")
-        menu.addItem(recent)
-        menu.addItem(NSMenuItem(title: "Close File", action: nil, keyEquivalent: ""))
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Larger Text", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Smaller Text", action: nil, keyEquivalent: ""))
-        let opacity = NSMenuItem(title: "Opacity", action: nil, keyEquivalent: "")
-        let opacityMenu = NSMenu(title: "Opacity")
-        for preset in Settings.opacityPresets {
-            opacityMenu.addItem(
-                NSMenuItem(title: "\(Int(preset * 100))%", action: nil, keyEquivalent: ""))
-        }
-        opacity.submenu = opacityMenu
-        menu.addItem(opacity)
-        menu.addItem(.separator())
-        captureItem.action = #selector(toggleCaptureVisible)
-        captureItem.target = self
-        menu.addItem(captureItem)
-        menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
-        quit.target = self
-        menu.addItem(quit)
-        return menu
-    }
-
-    @objc private func toggleMode() { onToggleMode() }
-
-    @objc private func toggleCaptureVisible() { onToggleCaptureVisible() }
-
-    @objc private func quit() { onQuit() }
 }

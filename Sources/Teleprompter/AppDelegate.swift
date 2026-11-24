@@ -6,8 +6,10 @@ import TeleprompterCore
 /// the menu-bar menu, and the global shortcut.
 ///
 /// Why: a menu-bar app has no document or main window to hang state on, so the delegate is the
-/// single owner that applies the launch rules (placement under the camera, capture hidden) and
-/// persists the window frame when the user moves or resizes it.
+/// single owner that applies the launch rules (reopen the last file, placement under the camera,
+/// capture hidden), carries out every menu action, and persists settings: the window frame when
+/// a move or resize settles and on quit, font size and opacity on change, the last file and
+/// recent files on open and close. The capture test is never persisted.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settingsStore = SettingsStore(defaults: .standard)
@@ -30,6 +32,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var testWindowNumbers: Set<Int> = []
     // The app the user was in when edit mode began; Lock for Recording hands focus back to it.
     private var appBeforeEdit: NSRunningApplication?
+    // The latest capture warning; sticky until relaunch (see checkPanelHidden).
+    private var captureWarningText: String?
+    private var shortcutUnavailable = false
+    // Saves the frame once a move or resize has settled, not on every intermediate event.
+    private var frameSaveTask: Task<Void, Never>?
+    /// How long the frame must stay still before it's saved.
+    static let frameSaveDelay: Duration = .milliseconds(500)
 
     /// Where scratch notes live: `~/Library/Application Support/Teleprompter/scratch.md`. The
     /// store creates the folder on the first save.
@@ -46,17 +55,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.statusMenu?.statusItemWindow
         }
         let store = NotesStore(scratchURL: Self.scratchURL())
+        // The last file only if it's still there; otherwise scratch, quietly.
+        if let url = settings.launchFile(exists: { FileManager.default.fileExists(atPath: $0.path) }
+        ) {
+            store.open(url)
+        }
         self.store = store
+        recordSource()
         modeState = ModeState.initial(hasNotes: !store.text.isEmpty)
         let content = NotesContentView(
             store: store, maxFontSize: settings.fontSize, mode: modeState.mode, frame: .zero)
         store.onExternalChange = { [weak self] in self?.notesDidChange() }
+        store.onErrorChange = { [weak self] in self?.refreshMenu() }
         contentView = content
 
         let panel = NotesPanel(settings: settings, content: content)
         panel.setFrame(launchFrame(), display: false)
         // Set after placement so the launch position isn't saved as if the user had moved it.
         panel.delegate = self
+        panel.onTextSizeStep = { [weak self] in self?.stepTextSize($0) }
         panel.orderFrontRegardless()
         self.panel = panel
         // Launching never takes focus: an empty-notes launch is in edit mode and clickable, but
@@ -65,11 +82,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         content.mode = modeState.mode
 
         let menu = StatusMenu()
-        menu.onToggleMode = { [weak self] in self?.toggleMode() }
-        menu.onToggleCaptureVisible = { [weak self] in self?.toggleCaptureVisible() }
-        menu.onQuit = { NSApplication.shared.terminate(nil) }
-        menu.update(from: modeState)
+        menu.onAction = { [weak self] in self?.perform($0) }
+        menu.onWillOpen = { [weak self] in self?.refreshMenu() }
         statusMenu = menu
+        refreshMenu()
         checkPanelHidden()
 
         // The same path as the menu item, so the shortcut can never do anything the menu doesn't.
@@ -77,21 +93,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         hotKey = HotKey(
             keyCode: UInt32(kVK_ANSI_N), modifiers: UInt32(controlKey | optionKey | cmdKey)
         ) { [weak self] in self?.toggleMode() }
-        if hotKey == nil { menu.showShortcutUnavailable() }
+        if hotKey == nil {
+            shortcutUnavailable = true
+            refreshMenu()
+        }
     }
 
-    /// The one place that reacts when the notes changed from outside the app (another program
-    /// edited the open file, or it vanished): the notes view re-renders at once.
-    ///
-    /// Task 10 extends this (for example, showing `store.lastError` in the menu). Its own
-    /// `open`/`closeFile` calls don't fire `onExternalChange`, so it must call this after them.
+    /// The one place that reacts when the notes or their source changed: from outside the app
+    /// (another program edited the open file, or it vanished) via `onExternalChange`, or after
+    /// the app's own `open`/`closeFile`, which don't fire that callback, so every caller of
+    /// those calls this. The notes view re-renders at once, the last file and recent files
+    /// follow the store's source, and the menu is rebuilt.
     func notesDidChange() {
         contentView?.notesChanged()
+        recordSource()
+        refreshMenu()
+    }
+
+    /// Carries out a menu pick. The one dispatch point for the menu, so every item's effect is
+    /// listed here.
+    func perform(_ action: MenuAction) {
+        switch action {
+        case .toggleMode: toggleMode()
+        case .open: chooseFile()
+        case .openRecent(let url): openFile(url)
+        case .closeFile:
+            store?.closeFile()
+            notesDidChange()
+        case .largerText: stepTextSize(1)
+        case .smallerText: stepTextSize(-1)
+        case .opacity(let value): setOpacity(value)
+        case .toggleCaptureVisible: toggleCaptureVisible()
+        case .dismissError: store?.dismissError()  // onErrorChange rebuilds the menu.
+        case .quit: NSApplication.shared.terminate(nil)
+        }
     }
 
     /// Delays quitting until pending edits are written, so the last keystrokes before Quit are
     /// never lost to the save debounce.
+    ///
+    /// Also saves the panel's frame now, in case a move ended within the save delay.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        frameSaveTask?.cancel()
+        saveFrame()
         guard let store else { return .terminateNow }
         Task {
             await store.flush()
@@ -110,9 +154,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func panelFrameChanged() {
         guard let panel else { return }
+        testWindow?.follow(panel.frame, within: visibleFrame(of: panel))
+        frameSaveTask?.cancel()
+        frameSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.frameSaveDelay)
+            guard !Task.isCancelled else { return }
+            self?.saveFrame()
+        }
+    }
+
+    private func saveFrame() {
+        guard let panel else { return }
         settings.windowFrame = panel.frame
         settingsStore.save(settings)
-        testWindow?.follow(panel.frame, within: visibleFrame(of: panel))
+    }
+
+    // Rebuilds the menu from the current state; cheap, so it's called after every change.
+    private func refreshMenu() {
+        guard let store, let statusMenu else { return }
+        statusMenu.render(
+            MenuModel(
+                settings: settings, modeState: modeState, source: store.source,
+                lastError: store.lastError, captureWarning: captureWarningText,
+                shortcutUnavailable: shortcutUnavailable,
+                fileExists: { FileManager.default.fileExists(atPath: $0.path) }))
+    }
+
+    // Makes the last file and recent files match what the store is showing: an opened file
+    // becomes the most recent; scratch (after Close File, a vanished file, or a failed reopen
+    // at launch) clears the last file so the next launch doesn't try it again.
+    private func recordSource() {
+        guard let store else { return }
+        let url: URL? = if case .file(let url) = store.source { url } else { nil }
+        guard url != settings.lastFileURL else { return }
+        if let url { settings.noteOpened(url) } else { settings.lastFileURL = nil }
+        settingsStore.save(settings)
+    }
+
+    private func openFile(_ url: URL) {
+        store?.open(url)
+        notesDidChange()
+    }
+
+    /// Runs the Open… dialog and opens the chosen file.
+    ///
+    /// The dialog is modal and necessarily activates the app (an inactive app's dialog can't
+    /// take typing). In recording mode, focus is handed back afterwards to the app that was
+    /// frontmost, as Lock for Recording does, so recording mode never keeps focus; in edit mode
+    /// the notes panel takes key focus again. The dialog may itself be recorded: see
+    /// `NotesFileChooser` for why that is accepted.
+    private func chooseFile() {
+        let front = NSWorkspace.shared.frontmostApplication
+        let previous = front == NSRunningApplication.current ? nil : front
+        let chooser = NotesFileChooser()
+        let dialog = NSOpenPanel()
+        chooser.configure(dialog)
+        NSApp.activate()
+        let response = withExtendedLifetime(chooser) { dialog.runModal() }
+        if response == .OK, let url = dialog.url { openFile(url) }
+        if modeState.mode == .recording {
+            if NSApp.isActive { previous?.activate() }
+        } else {
+            panel?.makeKey()
+        }
+    }
+
+    // Larger/Smaller Text and ⌘+/⌘−: the editor font and the reader's fit follow at once.
+    private func stepTextSize(_ steps: Int) {
+        settings.stepFontSize(steps)
+        settingsStore.save(settings)
+        contentView?.maxFontSize = settings.fontSize
+        refreshMenu()
+    }
+
+    private func setOpacity(_ value: Double) {
+        settings.opacity = value
+        settingsStore.save(settings)
+        panel?.setOpacity(settings.opacity)
+        refreshMenu()
     }
 
     // The panel's screen, so the test box lands on the same display; falls back to the main one.
@@ -148,7 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func syncToState() {
         // Toggles come from the user (menu or ⌃⌥⌘N), so entering edit takes focus.
         panel?.apply(modeState, takeFocus: true)
-        statusMenu?.update(from: modeState)
+        refreshMenu()
         syncTestWindow()
     }
 
@@ -181,7 +300,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let warning =
             captureWarning(sharingState: state)
             ?? strayWindowWarning(windowServerWindows(ownedBy: getpid()), allowed: allowed)
-        if let warning { statusMenu?.showWarning(warning) }
+        if let warning {
+            captureWarningText = warning
+            refreshMenu()
+        }
     }
 
     /// The saved frame if it still lands on a connected display, else the default under the
