@@ -1,0 +1,33 @@
+# Swift Package Manager / Xcode
+.build/
+.swiftpm/
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+Package.resolved.bak
+
+# Built app bundles and release artifacts
+build/
+dist/
+*.app
+*.zip
+*.dmg
+
+# Coverage and mutation-testing output
+*.profdata
+*.profraw
+coverage/
+muter_logs/
+
+# Secrets
+.env
+*.p12
+*.cer
+*.mobileprovision
+
+# Editor and OS cruft
+\#*#
+.#*
+*~
+*.swp
+.DS_Store
