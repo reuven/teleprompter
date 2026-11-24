@@ -20,9 +20,13 @@ Design: [`docs/superpowers/specs/2026-11-24-teleprompter-design.md`](docs/superp
 - [x] 7. Notes store (scratch, open file, save-back, reload; never overwrites what it can't read)
 - [x] 7b. Mutation testing on Core — Muter 92% (46/50, measured at a82fb18; scope in `docs/mutation-testing.md`) + manual MarkdownRenderer spot-check
 - [x] 8. App shell + ScreenFlow checkpoint — **passed 2026-11-24**: notes panel hidden, red control box recorded (keyboard check still open → Task 9)
-- [x] 9. Edit/recording views, global hotkey ⌃⌥⌘N, CaptureShield (all helper windows hidden) — merged; **hands-on check with Reuven pending**
-- [x] 10. File menu, appearance, persistence wiring — merged; hands-on check pending
-- [ ] 11. Release v0.1.0 (manual checklist, README, tag, GitHub release) — prep merged; checklist with Reuven + publish pending
+- [x] 9. Edit/recording views, global hotkey ⌃⌥⌘N, CaptureShield (all helper windows hidden) — merged; hands-on check passed 2026-11-24 (checklist sections 1–3)
+- [x] 10. File menu, appearance, persistence wiring — merged; files checked 2026-11-24 (section 4); quit alert and persistence (sections 5–6) not yet hand-tested
+- [x] 11. Release v0.1.0 (manual checklist, README, tag, GitHub release) — published 2026-11-24 after checklist sections 1–4 passed
 
 ## Wrap-up
 - [x] Whole-branch final review and its fix wave — approved 2026-11-24 (license notices, symlink save fix, README honesty, kept-scratch notice)
+
+## After v0.1.0
+- [ ] Hand-test checklist section 5 (quit alert) and section 6 (persistence)
+- [ ] Section 7: download the release zip and confirm the Gatekeeper “Open Anyway” flow
