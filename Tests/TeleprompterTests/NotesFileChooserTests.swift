@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 // Open… must offer only notes files (.md, .markdown, .txt), not every kind of plain text.
 
-@MainActor @Suite final class NotesFileChooserTests {
+@MainActor @Suite(.tags(.guiSession)) final class NotesFileChooserTests {
     let dir = FileManager.default.temporaryDirectory
         .appending(path: "NotesFileChooserTests-\(UUID().uuidString)")
 

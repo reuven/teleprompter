@@ -14,12 +14,12 @@ private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
 // The capture-test window is the positive control: it must be recordable, out of the way of the
 // notes, and inert to the mouse.
 
-@MainActor @Test func testWindowIsVisibleToCapture() {
+@MainActor @Test(.tags(.guiSession)) func testWindowIsVisibleToCapture() {
     let w = CaptureTestWindow(near: CGRect(x: 100, y: 500, width: 640, height: 200), within: screen)
     #expect(w.sharingType == .readOnly)
 }
 
-@MainActor @Test func testWindowSitsDirectlyBelowThePanel() {
+@MainActor @Test(.tags(.guiSession)) func testWindowSitsDirectlyBelowThePanel() {
     let panel = CGRect(x: 100, y: 500, width: 640, height: 200)
     let w = CaptureTestWindow(near: panel, within: screen)
     #expect(w.frame.size == panel.size && w.frame.minX == panel.minX)
@@ -47,7 +47,7 @@ private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
     #expect(f == CGRect(x: 2000, y: 392, width: 640, height: 200))
 }
 
-@MainActor @Test func followMovesWindowWithPanel() {
+@MainActor @Test(.tags(.guiSession)) func followMovesWindowWithPanel() {
     let w = CaptureTestWindow(near: CGRect(x: 100, y: 500, width: 640, height: 200), within: screen)
     let moved = CGRect(x: 300, y: 600, width: 500, height: 150)
     w.follow(moved, within: screen)
@@ -55,19 +55,19 @@ private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
     #expect(w.frame.maxY == moved.minY - CaptureTestWindow.gap && w.frame.size == moved.size)
 }
 
-@MainActor @Test func testWindowIgnoresMouseAndFloats() {
+@MainActor @Test(.tags(.guiSession)) func testWindowIgnoresMouseAndFloats() {
     let w = CaptureTestWindow(near: .zero, within: screen)
     #expect(w.ignoresMouseEvents && w.level == .floating)
     #expect(!w.canBecomeKey && !w.canBecomeMain)
 }
 
-@MainActor @Test func testWindowIsMarkedRed() {
+@MainActor @Test(.tags(.guiSession)) func testWindowIsMarkedRed() {
     let w = CaptureTestWindow(near: .zero, within: screen)
     #expect(w.contentView?.layer?.borderWidth == 4)
     #expect(w.warningLabel.stringValue == "VISIBLE TO RECORDING" && !w.warningLabel.isHidden)
 }
 
-@MainActor @Test func testWindowShowsOnlyFixedTestText() throws {
+@MainActor @Test(.tags(.guiSession)) func testWindowShowsOnlyFixedTestText() throws {
     let w = CaptureTestWindow(near: .zero, within: screen)
     #expect(
         w.textLabel.stringValue

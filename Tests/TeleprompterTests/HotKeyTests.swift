@@ -59,27 +59,27 @@ private let testCombo: (key: UInt32, other: UInt32, modifiers: UInt32) = {
     return SendEventToEventTarget(event, GetApplicationEventTarget())
 }
 
-@MainActor @Test func hotKeyRunsItsHandlerWhenPressed() throws {
+@MainActor @Test(.tags(.guiSession)) func hotKeyRunsItsHandlerWhenPressed() throws {
     var presses = 0
     let key = try register { presses += 1 }
     #expect(press(key.id) == noErr)
     #expect(presses == 1)
 }
 
-@MainActor @Test func secondRegistrationOfTheSameKeyFails() throws {
+@MainActor @Test(.tags(.guiSession)) func secondRegistrationOfTheSameKeyFails() throws {
     let first = try register()
     #expect(HotKey(keyCode: testCombo.key, modifiers: testCombo.modifiers) {} == nil)
     withExtendedLifetime(first) {}
 }
 
-@MainActor @Test func releasingAHotKeyFreesTheCombination() throws {
+@MainActor @Test(.tags(.guiSession)) func releasingAHotKeyFreesTheCombination() throws {
     var key: HotKey? = try register()
     #expect(key != nil)
     key = nil
     #expect(HotKey(keyCode: testCombo.key, modifiers: testCombo.modifiers) {} != nil)
 }
 
-@MainActor @Test func eachHotKeyOnlyAnswersItsOwnPresses() throws {
+@MainActor @Test(.tags(.guiSession)) func eachHotKeyOnlyAnswersItsOwnPresses() throws {
     var a = 0
     var b = 0
     let keyA = try register { a += 1 }
@@ -90,7 +90,7 @@ private let testCombo: (key: UInt32, other: UInt32, modifiers: UInt32) = {
     #expect(a == 2 && b == 1)
 }
 
-@MainActor @Test func eventsWithoutAnIdAreNotHandled() throws {
+@MainActor @Test(.tags(.guiSession)) func eventsWithoutAnIdAreNotHandled() throws {
     var presses = 0
     let key = try register { presses += 1 }
     #expect(press(nil) == OSStatus(eventNotHandledErr))

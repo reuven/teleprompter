@@ -14,7 +14,7 @@ private let mediumNotes = (1...8).map { "- point number \($0)" }.joined(separato
 
 /// Each test gets its own temporary folder for scratch notes and files, deleted afterwards, so
 /// tests never touch the user's notes and leave nothing behind.
-@MainActor @Suite final class NotesContentViewTests {
+@MainActor @Suite(.tags(.guiSession)) final class NotesContentViewTests {
     let dir = FileManager.default.temporaryDirectory
         .appending(path: "NotesContentViewTests-\(UUID().uuidString)")
 

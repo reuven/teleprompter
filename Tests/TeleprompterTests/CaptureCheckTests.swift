@@ -17,7 +17,7 @@ import Testing
     #expect(captureWarning(sharingState: nil) == warning)
 }
 
-@MainActor @Test func readsSharingStateFromWindowServer() {
+@MainActor @Test(.tags(.guiSession)) func readsSharingStateFromWindowServer() {
     let hidden = NSPanel(
         contentRect: CGRect(x: -20000, y: -20000, width: 10, height: 10), styleMask: [.borderless],
         backing: .buffered, defer: false)
@@ -37,7 +37,7 @@ import Testing
     #expect(windowServerSharingState(windowNumber: shown.windowNumber) == 1)
 }
 
-@Test func unknownWindowHasNoSharingState() {
+@Test(.tags(.guiSession)) func unknownWindowHasNoSharingState() {
     #expect(windowServerSharingState(windowNumber: 0) == nil)
 }
 
@@ -71,7 +71,7 @@ private func window(_ number: Int, sharing: Int? = 1, onScreen: Bool = true) -> 
     #expect(strayWindowWarning([window(7), window(8)], allowed: [7]) == warning)
 }
 
-@MainActor @Test func listsOnlyThisProcesssWindowsFromTheWindowServer() throws {
+@MainActor @Test(.tags(.guiSession)) func listsOnlyThisProcesssWindowsFromTheWindowServer() throws {
     // Far off screen: the window server lists it but reports it as not on screen, which is the
     // truth. (The test process can't put a window truly on screen; the app-launch check covers
     // the on-screen case.)

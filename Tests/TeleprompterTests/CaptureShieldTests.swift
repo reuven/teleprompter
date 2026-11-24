@@ -48,7 +48,7 @@ import Testing
     return w
 }
 
-@MainActor @Test func applyHidesHelpersAtAnyLevelButNotTheExemptWindows() {
+@MainActor @Test(.tags(.guiSession)) func applyHidesHelpersAtAnyLevelButNotTheExemptWindows() {
     let low = helper()
     let popup = helper(level: .popUpMenu)
     let status = helper(level: .statusBar)
@@ -61,7 +61,7 @@ import Testing
     #expect(test.sharingType == .readOnly && panel.sharingType == .none)
 }
 
-@MainActor @Test func shieldCoversWindowsCreatedLaterOnEachEventLoopPass() {
+@MainActor @Test(.tags(.guiSession)) func shieldCoversWindowsCreatedLaterOnEachEventLoopPass() {
     // The app posts didUpdateNotification after every event-loop pass; here it's posted by hand.
     let center = NotificationCenter()
     let status = helper(level: .statusBar)
@@ -86,7 +86,7 @@ import Testing
     timer.invalidate()
 }
 
-@MainActor @Test func shieldAlsoRunsWhileAMenuIsTracking() {
+@MainActor @Test(.tags(.guiSession)) func shieldAlsoRunsWhileAMenuIsTracking() {
     // AppKit posts no didUpdateNotification while a menu tracks the mouse, and that's exactly when
     // the menu's own window first appears; seen on macOS 26.5: sharing 1 for the whole first open.
     let shield = CaptureShield.start(center: NotificationCenter()) { nil }
@@ -98,7 +98,7 @@ import Testing
     withExtendedLifetime(shield) {}
 }
 
-@MainActor @Test func shieldCoversWindowsOrderedInWithoutAnEvent() {
+@MainActor @Test(.tags(.guiSession)) func shieldCoversWindowsOrderedInWithoutAnEvent() {
     // A window ordered in from a timer or async callback: the loop passes "before waiting" in the
     // default mode without any event, so no didUpdateNotification is needed (none is posted here).
     let shield = CaptureShield.start(center: NotificationCenter()) { nil }
@@ -110,7 +110,7 @@ import Testing
     withExtendedLifetime(shield) {}
 }
 
-@MainActor @Test func releasingTheShieldStopsIt() {
+@MainActor @Test(.tags(.guiSession)) func releasingTheShieldStopsIt() {
     let center = NotificationCenter()
     var shield: CaptureShield.Handle? = CaptureShield.start(center: center) { nil }
     #expect(shield != nil)

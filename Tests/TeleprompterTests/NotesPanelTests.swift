@@ -8,23 +8,23 @@ import Testing
 // These pin the anti-goals: the panel must stay out of screen recordings, and in recording mode
 // it must never take clicks or focus. None of them needs a visible window.
 
-@MainActor @Test func newPanelIsHiddenFromCapture() {
+@MainActor @Test(.tags(.guiSession)) func newPanelIsHiddenFromCapture() {
     #expect(NotesPanel(settings: Settings()).sharingType == .none)
 }
 
-@MainActor @Test func recordingModeIgnoresClicksAndFocus() {
+@MainActor @Test(.tags(.guiSession)) func recordingModeIgnoresClicksAndFocus() {
     let p = NotesPanel(settings: Settings())
     p.mode = .recording
     #expect(p.ignoresMouseEvents && !p.canBecomeKey && !p.canBecomeMain)
 }
 
-@MainActor @Test func editModeAcceptsClicksAndFocus() {
+@MainActor @Test(.tags(.guiSession)) func editModeAcceptsClicksAndFocus() {
     let p = NotesPanel(settings: Settings())
     p.mode = .edit
     #expect(!p.ignoresMouseEvents && p.canBecomeKey)
 }
 
-@MainActor @Test func panelIsNonActivatingAndOnAllSpaces() {
+@MainActor @Test(.tags(.guiSession)) func panelIsNonActivatingAndOnAllSpaces() {
     let p = NotesPanel(settings: Settings())
     #expect(p.styleMask.contains(.nonactivatingPanel))
     #expect(
@@ -32,25 +32,25 @@ import Testing
             && p.collectionBehavior.contains(.fullScreenAuxiliary))
 }
 
-@MainActor @Test func opacityFromSettings() {
+@MainActor @Test(.tags(.guiSession)) func opacityFromSettings() {
     #expect(NotesPanel(settings: Settings(opacity: 0.5)).backgroundAlpha == 0.5)
 }
 
-@MainActor @Test func panelFloatsAndStaysPut() {
+@MainActor @Test(.tags(.guiSession)) func panelFloatsAndStaysPut() {
     let p = NotesPanel(settings: Settings())
     #expect(p.level == .floating && !p.hidesOnDeactivate && p.isMovableByWindowBackground)
     #expect(p.collectionBehavior.contains(.stationary) && !p.canBecomeMain)
     #expect(p.styleMask.contains(.borderless) && p.styleMask.contains(.resizable))
 }
 
-@MainActor @Test func panelCannotBeResizedBelowTheMinimum() {
+@MainActor @Test(.tags(.guiSession)) func panelCannotBeResizedBelowTheMinimum() {
     // Small enough to lose the text, but no smaller: the padding alone takes 40 × 40.
     let p = NotesPanel(settings: Settings())
     #expect(p.contentMinSize == CGSize(width: 200, height: 80))
     #expect(p.contentMinSize == Placement.minimumSize)
 }
 
-@MainActor @Test func showsItsContentInsetByPaddingAndResizesIt() {
+@MainActor @Test(.tags(.guiSession)) func showsItsContentInsetByPaddingAndResizesIt() {
     let content = NSView()
     let p = NotesPanel(settings: Settings(), content: content)
     #expect(content.superview === p.backgroundView && p.content === content)
@@ -59,7 +59,7 @@ import Testing
     #expect(content.frame == CGRect(x: 20, y: 20, width: 760, height: 260))
 }
 
-@MainActor @Test func lockingReallyGivesUpKeyStatus() {
+@MainActor @Test(.tags(.guiSession)) func lockingReallyGivesUpKeyStatus() {
     // On screen (far off to the side) so the panel can genuinely become key; the first expectation
     // proves it did, so the second can't pass vacuously.
     let p = NotesPanel(settings: Settings())
@@ -78,7 +78,7 @@ import Testing
     #expect(p.mode == .recording && p.ignoresMouseEvents && p.firstResponder === p)
 }
 
-@MainActor @Test func applyingEditStateAcceptsInput() {
+@MainActor @Test(.tags(.guiSession)) func applyingEditStateAcceptsInput() {
     let p = NotesPanel(settings: Settings())
     var state = ModeState.initial(hasNotes: true)
     p.apply(state, takeFocus: true)
@@ -92,7 +92,7 @@ import Testing
 /// behavior where a LaunchServices-launched app's return to `.none` is ignored (this test process
 /// isn't launched that way, and AppKit's getter lies there anyway); only the runtime window-server
 /// self-check in `CaptureCheck.swift` covers that.
-@MainActor @Test func panelStaysHiddenThroughModeSwitches() {
+@MainActor @Test(.tags(.guiSession)) func panelStaysHiddenThroughModeSwitches() {
     let p = NotesPanel(settings: Settings())
     var state = ModeState.initial(hasNotes: true)
     for _ in 0..<4 {
@@ -107,7 +107,7 @@ import Testing
 
 /// Launching with empty notes starts in edit mode, but launching must never take keystrokes from
 /// the frontmost app: the panel is clickable but not key until the user clicks it.
-@MainActor @Test func launchApplyInEditModeDoesNotTakeFocus() throws {
+@MainActor @Test(.tags(.guiSession)) func launchApplyInEditModeDoesNotTakeFocus() throws {
     let content = NotesContentView(
         store: NotesStore(
             scratchURL: FileManager.default.temporaryDirectory.appending(
@@ -156,7 +156,7 @@ import Testing
     #expect(NotesPanel.textSizeStep(for: key("c")) == nil)
 }
 
-@MainActor @Test func commandPlusAndMinusStepTextSizeInEditModeOnly() {
+@MainActor @Test(.tags(.guiSession)) func commandPlusAndMinusStepTextSizeInEditModeOnly() {
     let p = NotesPanel(settings: Settings())
     var steps: [Int] = []
     p.onTextSizeStep = { steps.append($0) }
@@ -169,7 +169,7 @@ import Testing
     #expect(steps == [1, -1])
 }
 
-@MainActor @Test func opacityChangesTheBackgroundButNeverTheHiding() {
+@MainActor @Test(.tags(.guiSession)) func opacityChangesTheBackgroundButNeverTheHiding() {
     let p = NotesPanel(settings: Settings(opacity: 0.85))
     p.setOpacity(0.5)
     #expect(p.backgroundAlpha == 0.5)
@@ -189,7 +189,7 @@ import Testing
     @objc func redo(_ sender: Any?) { received.append("redo:") }
 }
 
-@MainActor @Test func editingShortcutsReachTheFocusedViewInEditModeOnly() {
+@MainActor @Test(.tags(.guiSession)) func editingShortcutsReachTheFocusedViewInEditModeOnly() {
     let spy = EditSpy()
     let p = NotesPanel(settings: Settings(), content: spy)
     p.mode = .edit
@@ -210,14 +210,14 @@ import Testing
     #expect(spy.received.count == 6)
 }
 
-@MainActor @Test func editingShortcutNobodyHandlesIsNotSwallowed() {
+@MainActor @Test(.tags(.guiSession)) func editingShortcutNobodyHandlesIsNotSwallowed() {
     let p = NotesPanel(settings: Settings(), content: NSView())
     p.mode = .edit
     p.makeFirstResponder(nil)
     #expect(!p.performKeyEquivalent(with: key("x")), "nothing can cut: left to AppKit")
 }
 
-@MainActor @Test func editingShortcutsWorkOnTheRealEditor() throws {
+@MainActor @Test(.tags(.guiSession)) func editingShortcutsWorkOnTheRealEditor() throws {
     let dir = FileManager.default.temporaryDirectory.appending(path: "PanelEdit-\(UUID())")
     defer { try? FileManager.default.removeItem(at: dir) }
     let store = NotesStore(scratchURL: dir.appending(path: "scratch.md"), saveDelay: .seconds(30))
@@ -274,7 +274,7 @@ import Testing
     #expect(NotesPanel.editingAction(for: key("c", code: kVK_ANSI_I)) == #selector(NSText.copy(_:)))
 }
 
-@MainActor @Test func hebrewEditingShortcutReachesTheEditor() {
+@MainActor @Test(.tags(.guiSession)) func hebrewEditingShortcutReachesTheEditor() {
     let spy = EditSpy()
     let p = NotesPanel(settings: Settings(), content: spy)
     p.mode = .edit
