@@ -52,6 +52,7 @@ public enum NotesSource: Equatable, Sendable {
     ///
     /// Cleared by a successful open or reload, by `dismissError()`, and by a successful save
     /// when the error was that save's own earlier failure (other errors stay until dismissed).
+    /// While kept scratch edits are unsaved, "cleared" means their notice comes back instead.
     /// A problem that persists is raised again on the next attempt: a failed save sets it
     /// every time, and blocked scratch saving (see the type's doc comment) re-raises it if the
     /// user dismissed it, so a save that isn't happening never goes silent.
@@ -291,9 +292,17 @@ public enum NotesSource: Equatable, Sendable {
     /// comes back rather than going silent.
     private func clearIfStale(_ message: inout String?) {
         if let stale = message, lastError == stale {
-            lastError = scratchUnsaved ? scratchFailureMessage : nil
+            lastError = remainingNotice
         }
         message = nil
+    }
+
+    /// What `lastError` should say once the open file's own problem is resolved (a save worked,
+    /// a reload succeeded, a file reverted): the kept-scratch notice while those edits are still
+    /// unsaved, else nothing. Why: clearing to nil would hide unsaved scratch edits, and the quit
+    /// check (`unsavedChangesReason`) would lose its reason too.
+    private var remainingNotice: String? {
+        scratchUnsaved ? scratchFailureMessage : nil
     }
 
     private static let scratchBlocked = "Scratch notes can't be saved until you relaunch."
@@ -379,7 +388,7 @@ public enum NotesSource: Equatable, Sendable {
             // Our own save, a repeat event, or a revert after a failed reload.
             if fileSavesSuspended {
                 fileSavesSuspended = false
-                lastError = nil
+                lastError = remainingNotice
                 savePendingNow()  // The file is as we left it, so held edits are safe to write.
             }
             return
@@ -388,7 +397,7 @@ public enum NotesSource: Equatable, Sendable {
             text = loaded.text
             knownFileBytes = loaded.data
             fileSavesSuspended = false
-            lastError = nil
+            lastError = remainingNotice
         case .failure(.missing):
             // The watcher gave up waiting for it: the file is gone for good. Drop the
             // pending save so the file is never recreated, and show scratch instead.

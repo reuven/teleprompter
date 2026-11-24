@@ -671,6 +671,35 @@ private func contents(_ url: URL) throws -> String {
         #expect(store.lastError?.contains("scratch notes") == true, "still unsaved, still said")
     }
 
+    @Test func keptScratchNoticeSurvivesAnExternalReload() async throws {
+        let unlockScratch = try lockScratchFolder()
+        defer { try? unlockScratch() }
+        let store = makeStore(saveDelay: .seconds(30))
+        store.userEdited("scratch typing")
+        let file = try makeFile("hello")
+        store.open(file)
+        try atomicReplace(file, with: Data("ext".utf8))
+        #expect(await waitUntil { self.changes.count >= 1 })
+        #expect(store.text == "ext")
+        #expect(store.lastError?.contains("scratch notes") == true, "still unsaved, still said")
+        #expect(store.unsavedChangesReason != nil)
+    }
+
+    @Test func keptScratchNoticeSurvivesARevertAfterAFailedReload() async throws {
+        let unlockScratch = try lockScratchFolder()
+        defer { try? unlockScratch() }
+        let store = makeStore(saveDelay: .seconds(30))
+        store.userEdited("scratch typing")
+        let file = try makeFile("hello")
+        store.open(file)
+        try atomicReplace(file, with: Data([0xFF, 0xFE, 0x00]))
+        #expect(await waitUntil { store.lastError?.contains("not being saved") == true })
+        try atomicReplace(file, with: Data("hello".utf8))
+        #expect(await waitUntil { store.lastError?.contains("not being saved") != true })
+        #expect(store.lastError?.contains("scratch notes") == true, "still unsaved, still said")
+        #expect(store.unsavedChangesReason != nil)
+    }
+
     @Test func unsavedReasonIsOnlyASaveProblem() async throws {
         let store = makeStore(saveDelay: .seconds(30))
         #expect(store.unsavedChangesReason == nil)
