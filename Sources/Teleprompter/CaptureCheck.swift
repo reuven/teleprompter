@@ -37,17 +37,20 @@ struct WindowServerWindow: Equatable {
     let isOnScreen: Bool
 }
 
-/// Every window the window server lists for process `pid`.
+/// Every window the window server lists for process `pid`, or nil if the window server gave no
+/// list at all.
 ///
 /// Why: the panel isn't the only window that could leak. macOS adds helper windows to our
 /// process on its own (see `CaptureShield`), so the self-check has to look at all of them.
-func windowServerWindows(ownedBy pid: pid_t) -> [WindowServerWindow] {
+func windowServerWindows(ownedBy pid: pid_t) -> [WindowServerWindow]? {
     let windows = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]]
-    return (windows ?? []).filter { $0[kCGWindowOwnerPID as String] as? pid_t == pid }.map {
-        WindowServerWindow(
-            number: $0[kCGWindowNumber as String] as? Int ?? 0,
-            sharingState: $0[kCGWindowSharingState as String] as? Int,
-            isOnScreen: $0[kCGWindowIsOnscreen as String] as? Bool ?? false)
+    return windows?.compactMap { window in
+        guard window[kCGWindowOwnerPID as String] as? pid_t == pid,
+            let number = window[kCGWindowNumber as String] as? Int
+        else { return nil }
+        return WindowServerWindow(
+            number: number, sharingState: window[kCGWindowSharingState as String] as? Int,
+            isOnScreen: window[kCGWindowIsOnscreen as String] as? Bool ?? false)
     }
 }
 
@@ -56,11 +59,13 @@ func windowServerWindows(ownedBy pid: pid_t) -> [WindowServerWindow] {
 ///
 /// Why: `CaptureShield` hides helper windows as they appear. This is the independent check that
 /// it worked, read from the window server rather than AppKit. An unreported sharing state counts
-/// as recordable, as it does for the panel. Exemptions are by identity, not layer, because system
-/// popups often sit at or above status-bar level.
-func strayWindowWarning(_ windows: [WindowServerWindow], allowed: Set<Int>) -> String? {
-    let stray = windows.contains {
-        $0.isOnScreen && $0.sharingState != 0 && !allowed.contains($0.number)
-    }
+/// as recordable, as it does for the panel, and so does a missing list (nil): what can't be
+/// checked isn't trusted. Exemptions are by identity, not layer, because system popups often sit
+/// at or above status-bar level.
+func strayWindowWarning(_ windows: [WindowServerWindow]?, allowed: Set<Int>) -> String? {
+    let stray =
+        (windows?.contains {
+            $0.isOnScreen && $0.sharingState != 0 && !allowed.contains($0.number)
+        }) != false
     return stray ? captureWarning(sharingState: nil) : nil
 }

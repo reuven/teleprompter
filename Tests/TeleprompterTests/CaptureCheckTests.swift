@@ -62,12 +62,16 @@ private func window(_ number: Int, sharing: Int? = 1, onScreen: Bool = true) -> 
     #expect(strayWindowWarning([window(7, sharing: nil)], allowed: []) == warning)
 }
 
+@Test func missingWindowListWarns() {
+    #expect(strayWindowWarning(nil, allowed: []) == warning)
+}
+
 @Test func allowedWindowsAreExemptByNumber() {
     #expect(strayWindowWarning([window(7), window(9)], allowed: [7, 9]) == nil)
     #expect(strayWindowWarning([window(7), window(8)], allowed: [7]) == warning)
 }
 
-@MainActor @Test func listsOnlyThisProcesssWindowsFromTheWindowServer() {
+@MainActor @Test func listsOnlyThisProcesssWindowsFromTheWindowServer() throws {
     // Far off screen: the window server lists it but reports it as not on screen, which is the
     // truth. (The test process can't put a window truly on screen; the app-launch check covers
     // the on-screen case.)
@@ -77,9 +81,10 @@ private func window(_ number: Int, sharing: Int? = 1, onScreen: Bool = true) -> 
     shown.sharingType = .readOnly
     shown.orderFrontRegardless()
     defer { shown.orderOut(nil) }
-    let entry = windowServerWindows(ownedBy: getpid()).first { $0.number == shown.windowNumber }
+    let mine = try #require(windowServerWindows(ownedBy: getpid()))
+    let entry = mine.first { $0.number == shown.windowNumber }
     #expect(
         entry
             == WindowServerWindow(number: shown.windowNumber, sharingState: 1, isOnScreen: false))
-    #expect(windowServerWindows(ownedBy: -1).isEmpty)
+    #expect(windowServerWindows(ownedBy: -1)?.isEmpty == true)
 }
