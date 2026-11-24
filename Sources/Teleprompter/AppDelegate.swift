@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // Nil when ⌃⌥⌘N couldn't be registered (another app owns it); the menu says so.
     private var hotKey: HotKey?
     // Keeps CaptureShield running after every event-loop pass.
-    private var shieldToken: NSObjectProtocol?
+    private var shield: CaptureShield.Handle?
     private var statusMenu: StatusMenu?
     // The recordable positive control; non-nil only while Show in Recordings (Test) is on.
     private var testWindow: CaptureTestWindow?
@@ -38,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// recorded. Then registers ⌃⌥⌘N.
     func applicationDidFinishLaunching(_ notification: Notification) {
         settings = settingsStore.load()
-        shieldToken = CaptureShield.start(center: .default) { [weak self] in
+        shield = CaptureShield.start(center: .default) { [weak self] in
             self?.statusMenu?.statusItemWindow
         }
         let store = NotesStore(scratchURL: Self.scratchURL())

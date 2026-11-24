@@ -65,8 +65,7 @@ import Testing
     // The app posts didUpdateNotification after every event-loop pass; here it's posted by hand.
     let center = NotificationCenter()
     let status = helper(level: .statusBar)
-    let token = CaptureShield.start(center: center) { status }
-    defer { center.removeObserver(token) }
+    let shield = CaptureShield.start(center: center) { status }
     let later = helper(level: .popUpMenu)
     let test = CaptureTestWindow(near: .zero, within: CGRect(x: 0, y: 0, width: 1440, height: 875))
     for window in [later, test, status] { window.orderFrontRegardless() }
@@ -75,4 +74,39 @@ import Testing
     center.post(name: NSApplication.didUpdateNotification, object: nil)
     #expect(later.sharingType == .none && test.sharingType == .readOnly)
     #expect(status.sharingType == .readOnly)
+    withExtendedLifetime(shield) {}
+}
+
+/// Runs one pass of the main run loop in `mode`, with a timer so the loop really waits (and so
+/// passes through "before waiting").
+@MainActor private func spin(_ mode: RunLoop.Mode) {
+    let timer = Timer(timeInterval: 0.02, repeats: false) { _ in }
+    RunLoop.main.add(timer, forMode: mode)
+    RunLoop.main.run(mode: mode, before: .now + 0.2)
+    timer.invalidate()
+}
+
+@MainActor @Test func shieldAlsoRunsWhileAMenuIsTracking() {
+    // AppKit posts no didUpdateNotification while a menu tracks the mouse, and that's exactly when
+    // the menu's own window first appears; seen on macOS 26.5: sharing 1 for the whole first open.
+    let shield = CaptureShield.start(center: NotificationCenter()) { nil }
+    let menuWindow = helper(level: .popUpMenu)
+    menuWindow.orderFrontRegardless()
+    defer { menuWindow.orderOut(nil) }
+    spin(.eventTracking)
+    #expect(menuWindow.sharingType == .none)
+    withExtendedLifetime(shield) {}
+}
+
+@MainActor @Test func releasingTheShieldStopsIt() {
+    let center = NotificationCenter()
+    var shield: CaptureShield.Handle? = CaptureShield.start(center: center) { nil }
+    #expect(shield != nil)
+    shield = nil
+    let later = helper()
+    later.orderFrontRegardless()
+    defer { later.orderOut(nil) }
+    center.post(name: NSApplication.didUpdateNotification, object: nil)
+    spin(.eventTracking)
+    #expect(later.sharingType == .readOnly)
 }

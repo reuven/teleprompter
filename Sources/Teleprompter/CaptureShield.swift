@@ -46,19 +46,61 @@ enum CaptureShield {
         }
     }
 
-    /// Re-applies the rule to all of the app's windows after every event-loop pass. Keep the
-    /// returned token for as long as the shield should stay up.
+    /// Keeps the shield running; releasing it stops the shield.
+    final class Handle {
+        private let center: NotificationCenter
+        private let token: NSObjectProtocol
+        private let observer: CFRunLoopObserver
+
+        fileprivate init(
+            center: NotificationCenter, token: NSObjectProtocol, observer: CFRunLoopObserver
+        ) {
+            self.center = center
+            self.token = token
+            self.observer = observer
+        }
+
+        deinit {
+            center.removeObserver(token)
+            CFRunLoopObserverInvalidate(observer)
+        }
+    }
+
+    /// Run-loop modes in which AppKit runs its own loops without posting `didUpdateNotification`:
+    /// menu tracking (where a menu's window first appears) and modal panels.
+    static let trackingModes: [RunLoop.Mode] = [.eventTracking, .modalPanel]
+
+    /// Re-applies the rule to all of the app's windows on every event-loop pass, until the
+    /// returned handle is released.
+    ///
+    /// Two hooks, because neither covers everything: `NSApplication.didUpdateNotification` after
+    /// each normal pass, and a main-run-loop observer for `trackingModes`, where AppKit posts no
+    /// update notification. Seen on macOS 26.5: without the second, the status menu's
+    /// `NSPopupMenuWindow` was recordable (sharing 1) for the whole of its first opening. The
+    /// observer runs just before the loop sleeps, ahead of Core Animation's commit (order 0 vs.
+    /// 2,000,000), so a new window is hidden before its first frame is sent to the screen.
     ///
     /// `statusItemWindow` is asked on each pass, since the icon's window can be recreated.
     static func start(
         center: NotificationCenter, statusItemWindow: @escaping @MainActor () -> NSWindow?
-    ) -> NSObjectProtocol {
-        center.addObserver(
+    ) -> Handle {
+        let run: @MainActor () -> Void = {
+            apply(to: NSApplication.shared.windows, statusItemWindow: statusItemWindow())
+        }
+        let token = center.addObserver(
             forName: NSApplication.didUpdateNotification, object: nil, queue: .main
         ) { _ in
-            MainActor.assumeIsolated {
-                apply(to: NSApplication.shared.windows, statusItemWindow: statusItemWindow())
-            }
+            MainActor.assumeIsolated { run() }
         }
+        let observer = CFRunLoopObserverCreateWithHandler(
+            nil, CFRunLoopActivity.beforeWaiting.rawValue, true, 0
+        ) { _, _ in
+            MainActor.assumeIsolated { run() }
+        }!
+        for mode in trackingModes {
+            CFRunLoopAddObserver(
+                CFRunLoopGetMain(), observer, CFRunLoopMode(mode.rawValue as CFString))
+        }
+        return Handle(center: center, token: token, observer: observer)
     }
 }
