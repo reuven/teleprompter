@@ -66,19 +66,21 @@ enum CaptureShield {
         }
     }
 
-    /// Run-loop modes in which AppKit runs its own loops without posting `didUpdateNotification`:
-    /// menu tracking (where a menu's window first appears) and modal panels.
-    static let trackingModes: [RunLoop.Mode] = [.eventTracking, .modalPanel]
-
     /// Re-applies the rule to all of the app's windows on every event-loop pass, until the
     /// returned handle is released.
     ///
-    /// Two hooks, because neither covers everything: `NSApplication.didUpdateNotification` after
-    /// each normal pass, and a main-run-loop observer for `trackingModes`, where AppKit posts no
-    /// update notification. Seen on macOS 26.5: without the second, the status menu's
-    /// `NSPopupMenuWindow` was recordable (sharing 1) for the whole of its first opening. The
-    /// observer runs just before the loop sleeps, ahead of Core Animation's commit (order 0 vs.
-    /// 2,000,000), so a new window is hidden before its first frame is sent to the screen.
+    /// Two hooks:
+    /// - `NSApplication.didUpdateNotification`, AppKit's documented after-every-event hook;
+    /// - a main-run-loop observer in the common modes (default, menu tracking, modal panels).
+    ///   It covers what the notification misses: AppKit posts none while a menu tracks (seen on
+    ///   macOS 26.5: without it, the status menu's `NSPopupMenuWindow` was recordable, sharing 1,
+    ///   for its whole first opening), nor for a window ordered in from a timer or async callback
+    ///   with no event. It runs just before the loop sleeps, ahead of Core Animation's commit
+    ///   (order 0 vs. 2,000,000), so a new window is hidden before its first frame reaches the
+    ///   screen.
+    ///
+    /// In the default mode both hooks may run on the same pass; that is deliberate and cheap (a
+    /// loop over a handful of windows that writes nothing once they're hidden).
     ///
     /// `statusItemWindow` is asked on each pass, since the icon's window can be recreated.
     static func start(
@@ -97,10 +99,7 @@ enum CaptureShield {
         ) { _, _ in
             MainActor.assumeIsolated { run() }
         }!
-        for mode in trackingModes {
-            CFRunLoopAddObserver(
-                CFRunLoopGetMain(), observer, CFRunLoopMode(mode.rawValue as CFString))
-        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
         return Handle(center: center, token: token, observer: observer)
     }
 }

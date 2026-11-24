@@ -98,6 +98,18 @@ import Testing
     withExtendedLifetime(shield) {}
 }
 
+@MainActor @Test func shieldCoversWindowsOrderedInWithoutAnEvent() {
+    // A window ordered in from a timer or async callback: the loop passes "before waiting" in the
+    // default mode without any event, so no didUpdateNotification is needed (none is posted here).
+    let shield = CaptureShield.start(center: NotificationCenter()) { nil }
+    let late = helper()
+    late.orderFrontRegardless()
+    defer { late.orderOut(nil) }
+    spin(.default)
+    #expect(late.sharingType == .none)
+    withExtendedLifetime(shield) {}
+}
+
 @MainActor @Test func releasingTheShieldStopsIt() {
     let center = NotificationCenter()
     var shield: CaptureShield.Handle? = CaptureShield.start(center: center) { nil }
