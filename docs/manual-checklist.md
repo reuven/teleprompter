@@ -87,7 +87,7 @@ panel and choose Quit.
 - [ ] **5.1 Return cancels.** Press Return in the alert.
   Expected: the alert closes, the app keeps running, nothing quits.
 - [ ] **5.2 Escape.** Quit again and press Escape.
-  Expected: it cancels (or does nothing); it does not quit.
+  Expected: Escape is Cancel: the alert closes and the app keeps running.
 - [ ] **5.3 Quit Anyway** is destructive and never the default.
   Expected: only an explicit click on Quit Anyway quits.
 - [ ] **5.4 Focus after Cancel.** Do 5.1 from recording mode.

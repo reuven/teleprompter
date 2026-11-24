@@ -1,31 +1,62 @@
 #!/usr/bin/env bash
 # Builds the release zip for VERSION and prints its SHA-256 and the `gh release create` command
 # (printed, never run: publishing is a deliberate manual step).
-# Usage: scripts/release.sh 0.1.0 [--dry-run]
-# Refuses unless on main, clean, with tag vVERSION at HEAD. --dry-run skips only the tag check.
+# Usage: scripts/release.sh VERSION [--dry-run]   (VERSION as N.N.N; --dry-run in any position)
+# Refuses unless on main, tree clean, with tag vVERSION at HEAD, in a full (non-shallow) clone.
+# --dry-run skips the branch and tag checks (a clean tree is still required) and does not print
+# the gh command.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-version="${1:?usage: scripts/release.sh VERSION [--dry-run]}"
+version=""
 dry_run=0
-[ "${2:-}" = "--dry-run" ] && dry_run=1
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) dry_run=1 ;;
+    -*) echo "Unknown option: $arg" >&2; exit 2 ;;
+    *)
+      [ -z "$version" ] || { echo "Only one VERSION allowed" >&2; exit 2; }
+      version="$arg"
+      ;;
+  esac
+done
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+  echo "usage: scripts/release.sh VERSION [--dry-run]  (VERSION like 0.1.0)" >&2
+  exit 2
+}
 
-[ "$(git branch --show-current)" = "main" ] || [ "$dry_run" = 1 ] || { echo "Not on main" >&2; exit 1; }
+[ "$(git rev-parse --is-shallow-repository)" = "false" ] || { echo "Shallow clone" >&2; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "Working tree is not clean" >&2; exit 1; }
 if [ "$dry_run" = 0 ]; then
+  [ "$(git branch --show-current)" = "main" ] || { echo "Not on main" >&2; exit 1; }
   git tag --points-at HEAD | grep -qx "v$version" || { echo "No tag v$version at HEAD" >&2; exit 1; }
 else
-  echo "(dry run: tag check skipped; branch check relaxed)"
+  echo "DRY RUN: branch and tag checks skipped"
 fi
 
 rm -rf dist
 mkdir dist
-scripts/build-app.sh
-zip="dist/Teleprompter-$version.zip"
-ditto -c -k --keepParent build/Teleprompter.app "$zip"
+VERSION="$version" scripts/build-app.sh
 
+app="build/Teleprompter.app"
+built="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
+[ "$built" = "$version" ] || { echo "Built version $built != $version" >&2; exit 1; }
+archs="$(lipo -archs "$app/Contents/MacOS/Teleprompter")"
+[[ " $archs " == *" arm64 "* && " $archs " == *" x86_64 "* ]] || {
+  echo "Binary is not universal (archs: $archs)" >&2
+  exit 1
+}
+
+zip="dist/Teleprompter-$version.zip"
+ditto -c -k --keepParent "$app" "$zip"
+
+echo "Version $built, archs: $archs"
 echo "SHA-256:"
 shasum -a 256 "$zip"
 echo
-echo "Not run. When ready, publish with:"
-echo "  gh release create v$version $zip --title \"Teleprompter $version\" --notes-file <notes>"
+if [ "$dry_run" = 1 ]; then
+  echo "DRY RUN — do not publish"
+else
+  echo "Not run. When ready, publish with:"
+  echo "  gh release create v$version $zip --title \"Teleprompter $version\" --notes-file <notes>"
+fi

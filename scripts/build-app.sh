@@ -11,11 +11,11 @@ archs=(--arch arm64 --arch x86_64)
 swift build -c release "${archs[@]}"
 bin="$(swift build -c release "${archs[@]}" --show-bin-path)/Teleprompter"
 
-# CFBundleShortVersionString: the tag without its "v" and without any -N-gSHA suffix
+# CFBundleShortVersionString: $VERSION when set (release.sh sets it); else the tag without its "v" and without any -N-gSHA suffix
 # (v0.1.0-3-gabc123 -> 0.1.0); "0.1.0" when there is no tag. CFBundleVersion must be numeric:
 # the commit count.
 described="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-version="${described#v}"
+version="${VERSION:-${described#v}}"
 version="${version:-0.1.0}"
 build="$(git rev-list --count HEAD)"
 app="build/Teleprompter.app"

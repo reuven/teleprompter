@@ -17,7 +17,7 @@ Every row below is a Muter measurement (`scripts/mutation.sh`), labeled with the
 | 2b13419 (timer tests added; before Task 10) | 35 | 29 | 82% |
 | a82fb18 (current: release branch, after Task 10; no new tests needed) | 50 | 46 | 92% |
 
-The 4 survivors in the current run: FileWatcher:117, Placement:61 (twice), TextFitter:51. All four are Muter artifacts or timing-only, and were already checked by hand (below): none reflects an untested behavior, so no new tests were added. NotesStore:206 and NotesStore:260, survivors in the 82% run, were killed in this one (NotesStore is 26/26). Muter counts a crash or compile failure of the mutated build as killed. The run took about 22 minutes (the machine was shared).
+The 4 survivors in the current run: FileWatcher:117, Placement:61 (twice), TextFitter:51. All four are Muter artifacts or timing-only, and were already checked by hand (below): none reflects an untested behavior, so no new tests were added. NotesStore:260 (reported as a survivor in the 82% run) and NotesStore:206 are not survivors in this one (NotesStore is 26/26). Muter counts a crash or compile failure of the mutated build as killed. The run took about 22 minutes.
 
 ## How to re-run
 
@@ -25,7 +25,7 @@ The 4 survivors in the current run: FileWatcher:117, Placement:61 (twice), TextF
 scripts/mutation.sh
 ```
 
-It writes a gitignored `muter.conf.yml` for this checkout, runs Muter inside one test slot, and leaves the JSON report at `muter_logs/muter-report.json` (gitignored). It takes 11 to 22 minutes. Do not run other `swift test` commands in this checkout meanwhile: Muter builds in this checkout's `.build`.
+It writes a gitignored `muter.conf.yml` for this checkout, runs Muter inside one test slot, and leaves the JSON report at `muter_logs/muter-report.json` (gitignored). It takes about 20 minutes (11 to 22 in our runs, depending on machine load). Do not run other `swift test` commands in this checkout meanwhile: Muter builds in this checkout's `.build`.
 
 ## What Muter could not do (exact failures, trimmed)
 

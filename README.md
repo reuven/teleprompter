@@ -43,7 +43,7 @@ ad hoc.
 - **Edit Notes** lets you type; **Lock for Recording** makes the panel click-through and
   stops it taking focus, so your typing and clicks go to the app underneath.
 - **⌃⌥⌘N** (the physical N key, so it works with any input source) toggles between the two
-  from any app. If another app owns that shortcut, the menu says "Shortcut unavailable".
+  from any app. If another app owns that shortcut, the menu says "Shortcut ⌃⌥⌘N unavailable".
 - Notes are Markdown: headings, bold, italic, code, lists, quotes, and tables render in
   recording mode.
 - The text shrinks to fit the panel (set the largest size with Larger/Smaller Text, or ⌘+ and
@@ -84,7 +84,7 @@ or the file you opened.
 ```sh
 swift test                 # run the tests
 scripts/coverage.sh        # tests plus the 100% line-coverage gate on the gated files
-scripts/mutation.sh        # Muter mutation testing on TeleprompterCore (about 11 minutes)
+scripts/mutation.sh        # Muter mutation testing on TeleprompterCore (about 20 minutes)
 swift format lint --strict -r Sources Tests
 ```
 

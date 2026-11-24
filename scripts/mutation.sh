@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs Muter mutation testing on Sources/TeleprompterCore (see docs/mutation-testing.md).
 # Generates muter.conf.yml (gitignored) with this checkout's paths, then runs Muter inside one
-# test slot. Takes about 11 minutes. The JSON report lands in muter_logs/muter-report.json.
+# test slot. Takes about 20 minutes. The JSON report lands in muter_logs/muter-report.json.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
