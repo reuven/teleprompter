@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var contentView: NotesContentView?
     // Nil when ⌃⌥⌘N couldn't be registered (another app owns it); the menu says so.
     private var hotKey: HotKey?
+    // Keeps CaptureShield running after every event-loop pass.
+    private var shieldToken: NSObjectProtocol?
     private var statusMenu: StatusMenu?
     // The recordable positive control; non-nil only while Show in Recordings (Test) is on.
     private var testWindow: CaptureTestWindow?
@@ -36,12 +38,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// recorded. Then registers ⌃⌥⌘N.
     func applicationDidFinishLaunching(_ notification: Notification) {
         settings = settingsStore.load()
+        shieldToken = CaptureShield.start()
         let store = NotesStore(scratchURL: Self.scratchURL())
         self.store = store
         modeState = ModeState.initial(hasNotes: !store.text.isEmpty)
         let content = NotesContentView(
             store: store, maxFontSize: settings.fontSize, mode: modeState.mode, frame: .zero)
-        store.onExternalChange = { [weak content] in content?.notesChanged() }
+        store.onExternalChange = { [weak self] in self?.notesDidChange() }
         contentView = content
 
         let panel = NotesPanel(settings: settings, content: content)
@@ -50,8 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.delegate = self
         panel.orderFrontRegardless()
         self.panel = panel
-        // After ordering in, so an empty-notes launch (edit mode) can really make the panel key.
-        panel.apply(modeState)
+        // Launching never takes focus: an empty-notes launch is in edit mode and clickable, but
+        // keystrokes stay with the frontmost app until the user clicks the panel.
+        panel.apply(modeState, takeFocus: false)
         content.mode = modeState.mode
 
         let menu = StatusMenu()
@@ -67,6 +71,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             keyCode: UInt32(kVK_ANSI_N), modifiers: UInt32(controlKey | optionKey | cmdKey)
         ) { [weak self] in self?.toggleMode() }
         if hotKey == nil { menu.showShortcutUnavailable() }
+    }
+
+    /// The one place that reacts when the notes changed from outside the app (another program
+    /// edited the open file, or it vanished): the notes view re-renders at once.
+    ///
+    /// Task 10 extends this (for example, showing `store.lastError` in the menu). Its own
+    /// `open`/`closeFile` calls don't fire `onExternalChange`, so it must call this after them.
+    func notesDidChange() {
+        contentView?.notesChanged()
     }
 
     /// Delays quitting until pending edits are written, so the last keystrokes before Quit are
@@ -146,12 +159,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // Asks the window server, not AppKit, whether the notes are hidden. A warning sticks until
     // relaunch: once the panel has been seen as recordable, it isn't trusted again.
+    //
+    // Runs the shield first, so helper windows created since the last event-loop pass are hidden,
+    // then checks the panel and every other on-screen window of ours (bar the capture test window
+    // and the menu bar's).
     private func checkPanelHidden() {
         guard let panel else { return }
+        CaptureShield.apply(to: NSApp.windows)
         let state = windowServerSharingState(windowNumber: panel.windowNumber)
-        if let warning = captureWarning(sharingState: state) {
-            statusMenu?.showWarning(warning)
-        }
+        let allowed = Set([testWindow?.windowNumber].compactMap { $0 })
+        let warning =
+            captureWarning(sharingState: state)
+            ?? strayWindowWarning(windowServerWindows(ownedBy: getpid()), allowed: allowed)
+        if let warning { statusMenu?.showWarning(warning) }
     }
 
     /// The saved frame if it still lands on a connected display, else the default under the

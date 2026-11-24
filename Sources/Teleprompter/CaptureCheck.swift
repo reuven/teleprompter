@@ -26,3 +26,46 @@ func windowServerSharingState(windowNumber: Int) -> Int? {
 func captureWarning(sharingState: Int?) -> String? {
     sharingState == 0 ? nil : "⚠ Notes may be visible to recordings — quit and relaunch"
 }
+
+/// One window as the window server describes it: just what the stray-window check needs.
+struct WindowServerWindow: Equatable {
+    /// The window number (`NSWindow.windowNumber`).
+    let number: Int
+    /// `kCGWindowSharingState`: 0 none, 1 read-only, 2 read-write; nil if not reported.
+    let sharingState: Int?
+    /// Whether the window is currently ordered in (and so could be captured).
+    let isOnScreen: Bool
+    /// `kCGWindowLayer`; status-bar and menu windows sit at 25 and above.
+    let layer: Int
+}
+
+/// Every window the window server lists for process `pid`.
+///
+/// Why: the panel isn't the only window that could leak. macOS adds helper windows to our
+/// process on its own (see `CaptureShield`), so the self-check has to look at all of them.
+func windowServerWindows(ownedBy pid: pid_t) -> [WindowServerWindow] {
+    let windows = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]]
+    return (windows ?? []).filter { $0[kCGWindowOwnerPID as String] as? pid_t == pid }.map {
+        WindowServerWindow(
+            number: $0[kCGWindowNumber as String] as? Int ?? 0,
+            sharingState: $0[kCGWindowSharingState as String] as? Int,
+            isOnScreen: $0[kCGWindowIsOnscreen as String] as? Bool ?? false,
+            layer: $0[kCGWindowLayer as String] as? Int ?? 0)
+    }
+}
+
+/// The menu warning if any of our windows is on screen and recordable, other than the windows
+/// in `allowed` (the capture test window) and status-bar-level windows (the menu-bar icon and
+/// its menus). Otherwise nil.
+///
+/// Why: `CaptureShield` hides helper windows as they appear. This is the independent check that
+/// it worked, read from the window server rather than AppKit. An unreported sharing state counts
+/// as recordable, as it does for the panel.
+func strayWindowWarning(_ windows: [WindowServerWindow], allowed: Set<Int>) -> String? {
+    let statusBarLayer = Int(CGWindowLevelForKey(.statusWindow))
+    let stray = windows.contains {
+        $0.isOnScreen && $0.sharingState != 0 && $0.layer < statusBarLayer
+            && !allowed.contains($0.number)
+    }
+    return stray ? captureWarning(sharingState: nil) : nil
+}

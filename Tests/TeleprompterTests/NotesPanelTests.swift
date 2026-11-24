@@ -101,3 +101,31 @@ import Testing
         #expect(p.sharingType == .none)
     }
 }
+
+/// Launching with empty notes starts in edit mode, but launching must never take keystrokes from
+/// the frontmost app: the panel is clickable but not key until the user clicks it.
+@MainActor @Test func launchApplyInEditModeDoesNotTakeFocus() throws {
+    let content = NotesContentView(
+        store: NotesStore(
+            scratchURL: FileManager.default.temporaryDirectory.appending(
+                path: "launch-\(UUID().uuidString)/scratch.md")),
+        maxFontSize: 32, mode: .edit, frame: .zero)
+    let p = NotesPanel(settings: Settings(), content: content)
+    p.setFrameOrigin(CGPoint(x: -20000, y: -20000))
+    p.orderFrontRegardless()
+    defer { p.orderOut(nil) }
+    let state = ModeState.initial(hasNotes: false)
+    try #require(state.mode == .edit)
+    p.apply(state, takeFocus: false)
+    content.mode = state.mode
+    #expect(p.mode == .edit && !p.ignoresMouseEvents && p.canBecomeKey)
+    #expect(!p.isKeyWindow)
+    // Control: the same panel does become key when focus is wanted, so the check above isn't
+    // vacuous.
+    var toggled = state
+    toggled.toggleMode()
+    p.apply(toggled)
+    toggled.toggleMode()
+    p.apply(toggled)
+    #expect(p.isKeyWindow)
+}
