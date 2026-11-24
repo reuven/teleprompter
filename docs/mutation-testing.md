@@ -6,7 +6,7 @@ Tools: Muter 16 (`brew install muter-mutation-testing/formulae/muter`), Swift 6.
 
 ## Muter result
 
-**82% of 35 mutants killed (29/35), measured at commit 2b13419. This is not a whole-library score.** It covers 6 of 7 Core files and 3 of 4 Muter operators (RelationalOperatorReplacement, RemoveSideEffects, ChangeLogicalConnector). It excludes `MarkdownRenderer.swift` (30 mutants; Muter crashes the unmutated baseline on it) and every SwapTernary mutant (Muter emits uncompilable code). The denominator shrank from 65 discovered mutants to 35 for that reason.
+**92% of 50 mutants killed (46/50), measured at commit a82fb18 (Core source unchanged by the later release-docs commits). This is not a whole-library score.** It covers 6 of 7 Core files and 3 of 4 Muter operators (RelationalOperatorReplacement, RemoveSideEffects, ChangeLogicalConnector). It excludes `MarkdownRenderer.swift` (Muter crashes the unmutated baseline on it; see the manual spot-check below) and every SwapTernary mutant (Muter emits uncompilable code). The denominator grew from 35 to 50 because Task 10 changed `NotesStore` and `Settings` (26 and 4 mutants now), so the earlier 82% is not comparable to this run.
 
 Every row below is a Muter measurement (`scripts/mutation.sh`), labeled with the commit it ran at.
 
@@ -14,9 +14,10 @@ Every row below is a Muter measurement (`scripts/mutation.sh`), labeled with the
 |---|---|---|---|
 | 582e925 (main, before any new tests; Core unchanged since the run) | 35 | 26 | 74% |
 | e287a4c's tests (measured just before that commit) | 35 | 27 | 77% |
-| 2b13419 (current: timer tests added) | 35 | 29 | 82% |
+| 2b13419 (timer tests added; before Task 10) | 35 | 29 | 82% |
+| a82fb18 (current: release branch, after Task 10; no new tests needed) | 50 | 46 | 92% |
 
-The 6 survivors in the current run: NotesStore:206 (equivalent, see below), FileWatcher:117, and four mutants Muter never actually inserts (NotesStore:260, Placement:61 twice, TextFitter:51), which are checked by hand below. Muter counts a crash or compile failure of the mutated build as killed. The run took 11 min 4 s (timer tests now take longer).
+The 4 survivors in the current run: FileWatcher:117, Placement:61 (twice), TextFitter:51. All four are Muter artifacts or timing-only, and were already checked by hand (below): none reflects an untested behavior, so no new tests were added. NotesStore:206 and NotesStore:260, survivors in the 82% run, were killed in this one (NotesStore is 26/26). Muter counts a crash or compile failure of the mutated build as killed. The run took about 22 minutes (the machine was shared).
 
 ## How to re-run
 
@@ -24,7 +25,7 @@ The 6 survivors in the current run: NotesStore:206 (equivalent, see below), File
 scripts/mutation.sh
 ```
 
-It writes a gitignored `muter.conf.yml` for this checkout, runs Muter inside one test slot, and leaves the JSON report at `muter_logs/muter-report.json` (gitignored). It takes about 11 minutes. Do not run other `swift test` commands in this checkout meanwhile: Muter builds in this checkout's `.build`.
+It writes a gitignored `muter.conf.yml` for this checkout, runs Muter inside one test slot, and leaves the JSON report at `muter_logs/muter-report.json` (gitignored). It takes 11 to 22 minutes. Do not run other `swift test` commands in this checkout meanwhile: Muter builds in this checkout's `.build`.
 
 ## What Muter could not do (exact failures, trimmed)
 
@@ -59,7 +60,7 @@ Each was verified by hand-mutating the source, running the named test through `t
 
 | Mutant | Reason |
 |---|---|
-| NotesStore:206 `switchToScratch` drops `watcher?.stop()` | Equivalent. Checked: the whole NotesStore suite passes. The next line sets `watcher = nil`; nothing else retains the `FileWatcher` (its callback captures `self` weakly), so `FileWatcher.deinit` stops the watch at once. |
+| NotesStore:206 `switchToScratch` drops `watcher?.stop()` | Equivalent (and not reported as a survivor in the a82fb18 run). Checked: the whole NotesStore suite passes. The next line sets `watcher = nil`; nothing else retains the `FileWatcher` (its callback captures `self` weakly), so `FileWatcher.deinit` stops the watch at once. |
 | FileWatcher:117 `retriesLeft > 0` to `>= 0` | One extra 50 ms retry before giving up; observable only by timing, and a test would be flaky. Not inserted by Muter either. |
 | MarkdownRenderer `max(0, indent - 1.2 * fontSize)` clamp removed | Equivalent: outdent is only used at depth 1 or deeper, where the value is never negative. |
 
