@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- The app icon: the same artwork as teleprompter-icon.svg, inset to macOS's icon grid
+       (an 824-point rounded square centered in the 1024 canvas), so it sits at the same visual
+       size as other apps' icons in Finder and the Dock. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a4a6b"/>
+      <stop offset="1" stop-color="#141a2a"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <g transform="translate(182.3 177.1) scale(0.644)">
+    <path d="M272 200H752A120 120 0 0 1 872 320V592A120 120 0 0 1 752 712H440L260 840L300 712H272A120 120 0 0 1 152 592V320A120 120 0 0 1 272 200Z" fill="none" stroke="#ffffff" stroke-width="56" stroke-linejoin="round"/>
+    <path d="M300 360H724M300 456H724M300 552H560" stroke="#ffffff" stroke-width="56" stroke-linecap="round"/>
+  </g>
+</svg>

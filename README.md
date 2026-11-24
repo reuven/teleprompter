@@ -1,3 +1,5 @@
+<img src="docs/images/teleprompter-icon-1024.png" alt="Teleprompter icon: a speech bubble with lines of notes" width="128" align="right">
+
 # Teleprompter
 
 A macOS menu-bar app that puts your notes on the screen you're recording, just
@@ -95,6 +97,7 @@ swift test                 # run the tests
 scripts/coverage.sh        # tests plus the 100% line-coverage gate on the gated files
 scripts/mutation.sh        # Muter mutation testing on TeleprompterCore (about 20 minutes)
 swift format lint --strict -r Sources Tests
+scripts/make-icon.sh       # regenerate the app icon and PNGs after editing an SVG in docs/images
 ```
 
 - Tests that need a window server (a logged-in GUI session: windows, the capture checks, the

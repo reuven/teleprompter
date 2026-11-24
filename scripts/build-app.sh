@@ -26,6 +26,9 @@ cp scripts/Info.plist "$app/Contents/Info.plist"
 # The binary statically links swift-markdown and swift-cmark, whose licenses require their notices
 # to travel with it.
 cp THIRD_PARTY_NOTICES.md "$app/Contents/Resources/THIRD_PARTY_NOTICES.md"
+# The icon Finder, the Open Anyway prompt and the About panel show (CFBundleIconFile in Info.plist).
+# Regenerate it from docs/images/teleprompter-appicon.svg with scripts/make-icon.sh.
+cp scripts/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$build" "$app/Contents/Info.plist"
 
