@@ -18,6 +18,10 @@ let package = Package(
             dependencies: ["TeleprompterCore"]
         ),
         .testTarget(
+            name: "TeleprompterTests",
+            dependencies: ["Teleprompter", "TeleprompterCore"]
+        ),
+        .testTarget(
             name: "TeleprompterCoreTests",
             dependencies: [
                 "TeleprompterCore",
