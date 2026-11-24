@@ -24,6 +24,10 @@
 - Shipping code: each task on its own feature branch (`feat/<task-slug>`), merged into `main` and deleted when the task's review passes.
 - Doc comments on every non-private type and function explain *why* it exists.
 - `TeleprompterCore` must not import Carbon or reference `NSApp`. AppKit is allowed only for `NSFont`, `NSColor`, `NSAttributedString`, `NSParagraphStyle`, and `NSTextList`.
+- Property-based tests (the Hypothesis equivalent) use `swift-property-based` (`.package(url: "https://github.com/x-sheep/swift-property-based.git", from: "2.0.1")`, product `PropertyBased`). It's a dependency of the **test targets only**. API: `await propertyCheck(count:input:...) { ... }` with `Gen.*` generators. When a property finds a bug, pin it with a plain `@Test` that hard-codes the shrunk input (this replaces Hypothesis's `@example`), next to the property.
+- Mutation testing: Muter on `TeleprompterCore` at the end of Task 7, and again before release (Task 11).
+
+*(Amended 2026-11-24 after Task 1, at Reuven's prompt: property tests, panel invariant tests, earlier mutation testing.)*
 
 ## Review Focus
 
@@ -130,7 +134,7 @@ docs/manual-checklist.md  Pre-release manual checks (incl. ScreenFlow)
   - `public static let minFontSize: Double = 14`
   - `public final class SettingsStore: @unchecked Sendable { public init(defaults: UserDefaults); public func load() -> Settings; public func save(_ s: Settings) }`. Stores JSON under key `"settings.v1"`. Missing or undecodable data → `Settings()`.
 
-- [ ] **Step 1:** Create a branch: `feat/settings`.
+- [ ] **Step 1:** Create a branch: `feat/settings`. In `Package.swift`, add the `swift-property-based` dependency (Global Constraints) to `TeleprompterCoreTests`. Also harden `scripts/coverage.sh`: a missing or non-numeric `percent` must fail the gate (have jq select `(.summary.lines.percent // -1)` and test with `>= 100` numerically). Confirm by running the script once with a deliberately uncovered function and checking `echo $?` prints `1` (not through a pipe). Remove the function.
 - [ ] **Step 2: Write failing tests:**
 
 ```swift
@@ -159,8 +163,24 @@ docs/manual-checklist.md  Pre-release manual checks (incl. ScreenFlow)
 }
 ```
 
+Add these properties, in `SettingsPropertyTests.swift`:
+
+```swift
+// any Double — including .nan, ±.infinity, .greatestFiniteMagnitude — normalizes into range
+@Test func fontSizeAlwaysInRange() async   // Gen.double(in: -1e9...1e9) plus explicit NaN/inf @Tests
+    // #expect((14...120).contains(Settings(fontSize: x).fontSize))
+@Test func opacityAlwaysAPreset() async    // #expect(Settings.opacityPresets.contains(Settings(opacity: x).opacity))
+@Test func normalizationIsIdempotent() async
+    // let s = Settings(fontSize: f, opacity: o); #expect(Settings(fontSize: s.fontSize, opacity: s.opacity) == s)
+@Test func codableRoundTrip() async        // encode → decode == original, for generated settings
+@Test func recentsInvariant() async        // after any sequence of noteOpened (Gen of 0...20 paths from a pool of 8):
+    // count <= 5, no duplicates, first == last opened
+@Test func nanFontSizeIsDefault()          // Settings(fontSize: .nan).fontSize == 32  (NaN → default, not min)
+@Test func nanOpacityIsDefault()           // Settings(opacity: .nan).opacity == 0.85
+```
+
 - [ ] **Step 3:** Run `testslot -- swift test --filter SettingsTests`. Expected: FAIL (not defined).
-- [ ] **Step 4:** Implement `Settings.swift`. Decoding uses `decodeIfPresent` with the defaults, then the same normalization the initializer uses.
+- [ ] **Step 4:** Implement `Settings.swift`. Watch out: Swift's `min`/`max` pass NaN through, so non-finite values need their own check before clamping. Decoding uses `decodeIfPresent` with the defaults, then the same normalization the initializer uses.
 - [ ] **Step 5:** Run the tests. Expected: PASS. Then `scripts/coverage.sh` passes.
 - [ ] **Step 6:** Lint, commit ("Add validated settings and store"), push, merge, delete the branch.
 
@@ -206,6 +226,16 @@ let external = ScreenInfo(frame: CGRect(x: 1512, y: 0, width: 2560, height: 1440
     #expect(Placement.restoredFrame(saved: CGRect(x: 1400, y: 500, width: 600, height: 200), screens: [builtIn]) == nil)
 }
 @Test func nilSavedIsNil() { #expect(Placement.restoredFrame(saved: nil, screens: [builtIn]) == nil) }
+```
+
+Property (Review Focus #3), in the same file:
+
+```swift
+@Test func restoredFrameIsMostlyOnScreen() async
+    // for random saved rects (origin -5000...5000, size 50...3000) and [builtIn] / [builtIn, external]:
+    // if let r = restoredFrame(...) { r == saved, and some screen's visibleFrame ∩ r has area >= 0.5 × r's area }
+@Test func defaultFrameInsideVisibleFrame() async
+    // for random visibleFrames at least as big as defaultSize: visibleFrame.contains(defaultFrame(on:))
 ```
 
 - [ ] **Step 3:** Run `testslot -- swift test --filter PlacementTests`. Expected: FAIL.
@@ -308,6 +338,18 @@ let box = CGSize(width: 600, height: 180)
 @Test func maxBelowFloorTreatedAsFloor() { #expect(TextFitter.fit("Hi", maxFontSize: 5, in: box).fontSize == 14) }
 ```
 
+Properties (Review Focus #5), with `count: 50` because each check renders text:
+
+```swift
+@Test func fitIsWithinBounds() async
+    // random markdown (Gen of 0...30 lines; each "- " + letters/spaces 0...60), maxFontSize 1...120, box 100...1200 × 50...600:
+    // 14 <= r.fontSize <= max(14, maxFontSize.rounded(.down))
+@Test func fitMeansItFits() async
+    // same inputs: if !r.overflows { height(md, r.fontSize, box.width) <= box.height }
+@Test func overflowOnlyAtFloor() async
+    // same inputs: if r.overflows { r.fontSize == 14 }
+```
+
 - [ ] **Step 3:** Run `testslot -- swift test --filter TextFitterTests`. Expected: FAIL.
 - [ ] **Step 4:** Implement `TextFitter.swift`.
 - [ ] **Step 5:** Run the tests and then `scripts/coverage.sh`. Expected: both PASS.
@@ -382,18 +424,32 @@ let box = CGSize(width: 600, height: 180)
 @Test func deletedOpenFileFallsBack()   // open; delete file; wait → source == .scratch, lastError set
 ```
 
+Property:
+
+```swift
+@Test func scratchRoundTripsAnyUnicode() async
+    // any String from Gen.unicodeScalar... including emoji, RTL, combining marks, "\r\n", "":
+    // userEdited(s); flush; new store at same scratchURL → text == s
+```
+
 - [ ] **Step 3:** Run `testslot -- swift test --filter NotesStoreTests`. Expected: FAIL.
 - [ ] **Step 4:** Implement `NotesStore.swift`. Debounce with a cancellable `Task` that sleeps `saveDelay`. Write scratch atomically; write files atomically.
 - [ ] **Step 5:** Run the tests 3 times, then `scripts/coverage.sh`. Expected: all PASS.
 - [ ] **Step 6:** Lint, commit ("Add notes store with save-back and reload"), push, merge, delete the branch.
+- [ ] **Step 7: Mutation testing on `TeleprompterCore`.** On a new branch, `chore/mutation`:
+  1. Install Muter (`brew install muter-mutation-testing/formulae/muter`) and run `muter init`. Configure it to run `swift test` through testslot and to mutate only `Sources/TeleprompterCore`.
+  2. Run it.
+  3. For every surviving mutant that reflects real logic (not doc strings or log text), write a test that kills it, then commit.
+  4. Record the mutation score in `docs/mutation-testing.md`.
+  5. If Muter can't build or run with Swift 6.3, write down exactly what failed in that file instead, commit, and move on. Never claim a score you didn't get.
 
 ---
 
 ### Task 8: App shell + real-window ScreenFlow checkpoint
 
 **Files:**
-- Create: `Sources/Teleprompter/AppDelegate.swift`, `NotesPanel.swift`, `StatusMenu.swift`, `scripts/Info.plist`, `scripts/build-app.sh`
-- Modify: `Sources/Teleprompter/main.swift`
+- Create: `Sources/Teleprompter/AppDelegate.swift`, `NotesPanel.swift`, `StatusMenu.swift`, `scripts/Info.plist`, `scripts/build-app.sh`, `Tests/TeleprompterTests/NotesPanelTests.swift`
+- Modify: `Sources/Teleprompter/main.swift`, `Package.swift` (new test target `TeleprompterTests` depending on the executable target, using `@testable import Teleprompter`), `scripts/coverage.sh` (also gate `Sources/Teleprompter/NotesPanel.swift` at 100%)
 
 **Interfaces:**
 - Consumes: `Settings`, `SettingsStore`, `Placement`, `ModeState`
@@ -413,7 +469,29 @@ let box = CGSize(width: 600, height: 180)
     3. `codesign --force --sign - build/Teleprompter.app`
 
 - [ ] **Step 1:** Create a branch: `feat/app-shell`.
-- [ ] **Step 2:** Implement the panel, the status item with Quit and the capture-check toggle, and placement on launch (`Placement.restoredFrame` ?? `defaultFrame(on: cameraScreen)`). Show fixed sample text. Save the frame to settings on move and resize.
+- [ ] **Step 2: Write failing panel tests** (these pin the anti-goals; no screen needed):
+
+```swift
+@MainActor @Test func newPanelIsHiddenFromCapture() { #expect(NotesPanel(settings: Settings()).sharingType == .none) }
+@MainActor @Test func recordingModeIgnoresClicksAndFocus() {
+    let p = NotesPanel(settings: Settings()); p.mode = .recording
+    #expect(p.ignoresMouseEvents && !p.canBecomeKey && !p.canBecomeMain) }
+@MainActor @Test func editModeAcceptsClicksAndFocus() {
+    let p = NotesPanel(settings: Settings()); p.mode = .edit
+    #expect(!p.ignoresMouseEvents && p.canBecomeKey) }
+@MainActor @Test func captureCheckTogglesSharing() {
+    let p = NotesPanel(settings: Settings())
+    p.setCaptureVisible(true); #expect(p.sharingType == .readOnly)
+    p.setCaptureVisible(false); #expect(p.sharingType == .none) }
+@MainActor @Test func panelIsNonActivatingAndOnAllSpaces() {
+    let p = NotesPanel(settings: Settings())
+    #expect(p.styleMask.contains(.nonactivatingPanel))
+    #expect(p.collectionBehavior.contains(.canJoinAllSpaces) && p.collectionBehavior.contains(.fullScreenAuxiliary)) }
+@MainActor @Test func opacityFromSettings() { #expect(NotesPanel(settings: Settings(opacity: 0.5)).backgroundAlpha == 0.5) }
+```
+
+Run `testslot -- swift test --filter NotesPanelTests`. Expected: FAIL (`NotesPanel` not defined).
+- [ ] **Step 2b:** Implement `NotesPanel(settings:)` (with `var backgroundAlpha: Double` exposed for the test). Then implement the status item with Quit and the capture-check toggle, and placement on launch (`Placement.restoredFrame` ?? `defaultFrame(on: cameraScreen)`). Show fixed sample text. Save the frame to settings on move and resize.
 - [ ] **Step 3:** Run `scripts/build-app.sh && open build/Teleprompter.app`. Expected: no Dock icon, a menu-bar icon, and the panel at top center.
 - [ ] **Step 4: CHECKPOINT with Reuven.** He records with ScreenFlow while:
   - the panel is hidden
@@ -421,7 +499,7 @@ let box = CGSize(width: 600, height: 180)
   - a full-screen app is in front
 
   Expected: the panel is absent from the recording except during the test toggle, where it has the red border. **Stop the plan if hiding fails**, and go back to the spec's fallback discussion.
-- [ ] **Step 5:** Run `scripts/coverage.sh` (Core is unchanged; must still pass) and lint. Commit ("Add app shell, panel, build script"), push, merge, delete the branch.
+- [ ] **Step 5:** Run `scripts/coverage.sh`. Expected: Core and `NotesPanel.swift` at 100%. Then and lint. Commit ("Add app shell, panel, build script"), push, merge, delete the branch.
 
 ---
 
