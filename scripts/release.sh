@@ -64,7 +64,10 @@ mkdir "$stage"
 ditto "$app" "$stage/Teleprompter.app"
 cp LICENSE THIRD_PARTY_NOTICES.md "$stage/"
 zip="dist/Teleprompter-$version.zip"
-ditto -c -k --keepParent "$stage" "$zip"
+# --norsrc leaves out extended attributes (macOS adds com.apple.provenance to built files). Kept,
+# they become ._* AppleDouble entries that plain `unzip` extracts into the bundle as extra files,
+# which breaks its code signature. The signature itself is in the bundle's files, not in xattrs.
+ditto -c -k --norsrc --keepParent "$stage" "$zip"
 # Listed into a variable first: `zipinfo | grep -q` could fail under pipefail when grep exits early.
 listing="$(zipinfo -1 "$zip")"
 for entry in Teleprompter.app/Contents/MacOS/Teleprompter LICENSE THIRD_PARTY_NOTICES.md; do
@@ -73,6 +76,7 @@ for entry in Teleprompter.app/Contents/MacOS/Teleprompter LICENSE THIRD_PARTY_NO
     exit 1
   }
 done
+! grep -q '/\._' <<<"$listing" || { echo "Zip contains ._* AppleDouble entries" >&2; exit 1; }
 
 echo "Version $built, archs: $archs"
 echo "SHA-256:"
