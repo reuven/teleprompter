@@ -20,6 +20,8 @@ public struct Settings: Codable, Sendable, Equatable {
     public static let defaultOpacity: Double = 0.85
     /// Maximum number of remembered recent files.
     public static let maxRecentFiles = 5
+    /// How much Larger Text / Smaller Text (and ⌘+ / ⌘−) change the font size, in points.
+    public static let fontSizeStep: Double = 2
 
     /// Text size in points. Settable by the UI; always re-normalized so a bad write cannot stick.
     public var fontSize: Double {
@@ -70,6 +72,25 @@ public struct Settings: Codable, Sendable, Equatable {
     public mutating func noteOpened(_ url: URL) {
         lastFileURL = url
         recentFiles = Settings.normalizedRecents([url] + recentFiles)
+    }
+
+    /// Changes the font size by `steps` × `fontSizeStep` (negative to shrink), clamped like any
+    /// other write, so the menu and the panel's shortcuts share one rule.
+    public mutating func stepFontSize(_ steps: Int) {
+        fontSize += Double(steps) * Settings.fontSizeStep
+    }
+
+    /// Whether Larger Text would change anything; the menu disables the item at the maximum.
+    public var canMakeTextLarger: Bool { fontSize < Settings.maxFontSize }
+
+    /// Whether Smaller Text would change anything; the menu disables the item at the minimum.
+    public var canMakeTextSmaller: Bool { fontSize > Settings.minFontSize }
+
+    /// The file to reopen at launch: `lastFileURL` if `exists` says it's still there, else nil
+    /// (scratch notes). Why a check first: a file deleted or moved while the app was closed
+    /// should quietly give scratch notes, not an error on every launch.
+    public func launchFile(exists: (URL) -> Bool) -> URL? {
+        lastFileURL.flatMap { exists($0) ? $0 : nil }
     }
 
     // Swift's min/max pass NaN through, so NaN gets its own check before clamping.

@@ -96,3 +96,25 @@ import Testing
     s.opacity = 0.6
     #expect(s.opacity == 0.5)
 }
+
+@Test func stepsFontSizeByTwoPointsAndStopsAtTheLimits() {
+    var s = Settings(fontSize: 32)
+    s.stepFontSize(1)
+    #expect(s.fontSize == 34)
+    s.stepFontSize(-1)
+    s.stepFontSize(-1)
+    #expect(s.fontSize == 30)
+    s = Settings(fontSize: 119)
+    s.stepFontSize(1)
+    #expect(s.fontSize == 120 && !s.canMakeTextLarger && s.canMakeTextSmaller)
+    s = Settings(fontSize: 15)
+    s.stepFontSize(-1)
+    #expect(s.fontSize == 14 && !s.canMakeTextSmaller && s.canMakeTextLarger)
+}
+
+@Test func launchFileIsTheLastFileOnlyWhileItExists() {
+    let url = URL(fileURLWithPath: "/tmp/talk.md")
+    #expect(Settings().launchFile(exists: { _ in true }) == nil)
+    #expect(Settings(lastFileURL: url).launchFile(exists: { $0 == url }) == url)
+    #expect(Settings(lastFileURL: url).launchFile(exists: { _ in false }) == nil)
+}
