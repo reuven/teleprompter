@@ -30,4 +30,4 @@ Design: [`docs/superpowers/specs/2026-11-24-teleprompter-design.md`](docs/superp
 ## After v0.1.0
 - [ ] Hand-test checklist section 5 (quit alert) and section 6 (persistence)
 - [ ] Section 7: download the release zip and confirm the Gatekeeper “Open Anyway” flow
-- [x] App icon (original artwork in `docs/images`, `scripts/AppIcon.icns`) — on main; ships in the next release
+- [x] App icon (original artwork in `docs/images`, `scripts/AppIcon.icns`) — released in v0.1.1
