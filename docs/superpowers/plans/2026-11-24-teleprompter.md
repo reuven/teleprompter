@@ -436,7 +436,7 @@ Property:
 - [x] **Step 4:** Implement `NotesStore.swift`. Debounce with a cancellable `Task` that sleeps `saveDelay`. Write scratch atomically; write files atomically.
 - [x] **Step 5:** Run the tests 3 times, then `scripts/coverage.sh`. Expected: all PASS.
 - [x] **Step 6:** Lint, commit ("Add notes store with save-back and reload"), push, merge, delete the branch.
-- [ ] **Step 7: Mutation testing on `TeleprompterCore`.** On a new branch, `chore/mutation`:
+- [x] **Step 7: Mutation testing on `TeleprompterCore`.** On a new branch, `chore/mutation`:
   1. Install Muter (`brew install muter-mutation-testing/formulae/muter`) and run `muter init`. Configure it to run `swift test` through testslot and to mutate only `Sources/TeleprompterCore`.
   2. Run it.
   3. For every surviving mutant that reflects real logic (not doc strings or log text), write a test that kills it, then commit.
