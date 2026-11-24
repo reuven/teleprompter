@@ -18,6 +18,8 @@ final class StatusMenu: NSObject {
     private let statusItem: NSStatusItem
     private let warningItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let modeItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let shortcutItem = NSMenuItem(
+        title: "Shortcut ⌃⌥⌘N unavailable", action: nil, keyEquivalent: "")
     private let captureItem = NSMenuItem(
         title: "Show in Recordings (Test)", action: nil, keyEquivalent: "")
 
@@ -50,6 +52,12 @@ final class StatusMenu: NSObject {
         statusItem.button?.contentTintColor = .systemRed
     }
 
+    /// Adds a disabled "Shortcut ⌃⌥⌘N unavailable" item under the mode item, so a shortcut that
+    /// couldn't be registered (another app owns it) is visible instead of silently doing nothing.
+    func showShortcutUnavailable() {
+        shortcutItem.isHidden = false
+    }
+
     /// Shows a checkmark next to Show in Recordings while the red test window is up, so the menu
     /// always tells the truth about whether a recordable window is on screen.
     func setCaptureVisible(_ on: Bool) {
@@ -65,6 +73,9 @@ final class StatusMenu: NSObject {
         modeItem.action = #selector(toggleMode)
         modeItem.target = self
         menu.addItem(modeItem)
+        shortcutItem.isEnabled = false
+        shortcutItem.isHidden = true
+        menu.addItem(shortcutItem)
         // Placeholders until Tasks 7 and 10 wire them; nil actions render disabled.
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Open…", action: nil, keyEquivalent: ""))

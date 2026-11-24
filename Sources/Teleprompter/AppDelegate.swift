@@ -1,8 +1,9 @@
 import AppKit
+import Carbon.HIToolbox
 import TeleprompterCore
 
-/// Owns the app's long-lived objects and connects them: settings, mode, the notes panel, and the
-/// menu-bar menu.
+/// Owns the app's long-lived objects and connects them: settings, notes, mode, the notes panel,
+/// the menu-bar menu, and the global shortcut.
 ///
 /// Why: a menu-bar app has no document or main window to hang state on, so the delegate is the
 /// single owner that applies the launch rules (placement under the camera, capture hidden) and
@@ -11,26 +12,47 @@ import TeleprompterCore
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settingsStore = SettingsStore(defaults: .standard)
     private var settings = Settings()
-    // Sample text counts as notes, so launch starts in recording mode, as it will with a file.
+    // Replaced at launch from the notes: recording when there are notes to read, edit when empty.
     private var modeState = ModeState.initial(hasNotes: true)
+    private var store: NotesStore?
     private var panel: NotesPanel?
+    private var contentView: NotesContentView?
+    // Nil when ⌃⌥⌘N couldn't be registered (another app owns it); the menu says so.
+    private var hotKey: HotKey?
     private var statusMenu: StatusMenu?
     // The recordable positive control; non-nil only while Show in Recordings (Test) is on.
     private var testWindow: CaptureTestWindow?
     // The app the user was in when edit mode began; Lock for Recording hands focus back to it.
     private var appBeforeEdit: NSRunningApplication?
 
-    /// Builds the panel and menu once AppKit is ready, places the panel, and shows it without
-    /// activating the app, so launching never steals focus from the app being recorded.
+    /// Where scratch notes live: `~/Library/Application Support/Teleprompter/scratch.md`. The
+    /// store creates the folder on the first save.
+    static func scratchURL() -> URL {
+        URL.applicationSupportDirectory.appending(path: "Teleprompter/scratch.md")
+    }
+
+    /// Loads the notes, builds the panel and menu once AppKit is ready, places the panel, and
+    /// shows it without activating the app, so launching never steals focus from the app being
+    /// recorded. Then registers ⌃⌥⌘N.
     func applicationDidFinishLaunching(_ notification: Notification) {
         settings = settingsStore.load()
-        let panel = NotesPanel(settings: settings)
-        panel.apply(modeState)
+        let store = NotesStore(scratchURL: Self.scratchURL())
+        self.store = store
+        modeState = ModeState.initial(hasNotes: !store.text.isEmpty)
+        let content = NotesContentView(
+            store: store, maxFontSize: settings.fontSize, mode: modeState.mode, frame: .zero)
+        store.onExternalChange = { [weak content] in content?.notesChanged() }
+        contentView = content
+
+        let panel = NotesPanel(settings: settings, content: content)
         panel.setFrame(launchFrame(), display: false)
         // Set after placement so the launch position isn't saved as if the user had moved it.
         panel.delegate = self
         panel.orderFrontRegardless()
         self.panel = panel
+        // After ordering in, so an empty-notes launch (edit mode) can really make the panel key.
+        panel.apply(modeState)
+        content.mode = modeState.mode
 
         let menu = StatusMenu()
         menu.onToggleMode = { [weak self] in self?.toggleMode() }
@@ -39,6 +61,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.update(from: modeState)
         statusMenu = menu
         checkPanelHidden()
+
+        // The same path as the menu item, so the shortcut can never do anything the menu doesn't.
+        hotKey = HotKey(
+            keyCode: UInt32(kVK_ANSI_N), modifiers: UInt32(controlKey | optionKey | cmdKey)
+        ) { [weak self] in self?.toggleMode() }
+        if hotKey == nil { menu.showShortcutUnavailable() }
+    }
+
+    /// Delays quitting until pending edits are written, so the last keystrokes before Quit are
+    /// never lost to the save debounce.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let store else { return .terminateNow }
+        Task {
+            await store.flush()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     /// Remembers the new position so the panel reopens where the user left it, and keeps the
@@ -61,7 +100,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? panel.frame
     }
 
-    // ModeState decides (toggling mode also clears the capture check); panel and menu follow.
+    // The one toggle path, for the menu item and ⌃⌥⌘N alike. ModeState decides (toggling also
+    // turns the capture test off); the panel, menu and test window follow, then the notes view,
+    // then the window-server check.
     private func toggleMode() {
         modeState.toggleMode()
         if modeState.mode == .edit {
@@ -69,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             appBeforeEdit = front == NSRunningApplication.current ? nil : front
         }
         syncToState()
+        contentView?.mode = modeState.mode
         if modeState.mode == .recording {
             // The non-activating panel normally leaves our app inactive; if something activated it
             // anyway, hand focus back so typing reaches the app being recorded.
