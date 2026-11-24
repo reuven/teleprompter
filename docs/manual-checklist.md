@@ -25,12 +25,18 @@ while it runs. Review the recording afterward, frame by frame where noted.
   Expected: the context menu is absent from its first frame.
 - [ ] **1.5 Look Up / Services.** In edit mode, press ⌃⌘D on a word.
   Expected: nothing appears in the recording.
-- [ ] **1.6 Full-screen app.** Put another app in full screen (its own Space) with the panel
+- [ ] **1.6 Caret and input source.** In edit mode, type in the panel, toggle Caps Lock, and
+  switch input source (for example to Hebrew and back).
+  Expected: no caret, Caps Lock indicator, or input-source indicator appears in the recording.
+- [ ] **1.7 Full-screen app.** Put another app in full screen (its own Space) with the panel
   floating above it.
   Expected: the panel stays visible to you, stays absent from the recording.
-- [ ] **1.7 Two displays.** Attach a second display and relaunch.
+- [ ] **1.8 Two displays.** Attach a second display and relaunch.
   Expected: no false "Notes may be visible to recordings — quit and relaunch" warning, and
   the panel is still absent from the recording.
+- [ ] **1.9 Capture test is not remembered.** Leave Show in Recordings (Test) on, quit, and
+  relaunch.
+  Expected: no red test box after relaunch.
 
 ## 2. Focus
 
@@ -64,7 +70,8 @@ while it runs. Review the recording afterward, frame by frame where noted.
 
 - [ ] **4.1 Open… from recording mode.** Choose Open… while locked for recording.
   Expected: the open dialog comes forward; after choosing or cancelling, focus returns to the
-  app you were in.
+  app you were in. The Open… dialog (including its file preview) and the menu-bar icon are not
+  hidden from recordings; open files before you start recording.
 - [ ] **4.2 Open Recent.** Open two files, then pick the first from Open Recent.
   Expected: it opens, and the list shows the most recent first.
 - [ ] **4.3 Close File.** Choose Close File.
@@ -87,7 +94,7 @@ panel and choose Quit.
 - [ ] **5.1 Return cancels.** Press Return in the alert.
   Expected: the alert closes, the app keeps running, nothing quits.
 - [ ] **5.2 Escape.** Quit again and press Escape.
-  Expected: Escape is Cancel: the alert closes and the app keeps running.
+  Expected: Escape cancels or does nothing; it never quits. (Return stays Cancel, as in 5.1.)
 - [ ] **5.3 Quit Anyway** is destructive and never the default.
   Expected: only an explicit click on Quit Anyway quits.
 - [ ] **5.4 Focus after Cancel.** Do 5.1 from recording mode.
