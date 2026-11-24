@@ -19,7 +19,9 @@ public struct FitResult: Sendable, Equatable {
 ///
 /// The user's font size is a maximum, not a promise: text silently cut off mid-recording
 /// is the worst failure for this tool, so we shrink (down to `Settings.minFontSize`) and
-/// report honestly when even that is not enough.
+/// report honestly when even that is not enough. Main-actor isolated because it drives
+/// AppKit text measurement, which is not documented as thread-safe.
+@MainActor
 public enum TextFitter {
     /// Returns the largest whole-point size in `minFontSize...maxFontSize` at which
     /// `markdown` fits in `size`, the drawable content area (callers subtract insets).

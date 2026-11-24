@@ -7,7 +7,7 @@ import Testing
 private let box = CGSize(width: 600, height: 180)
 
 /// Measured height, rounded up exactly as the fitter does, for independent verification.
-private func height(_ md: String, _ size: Double, _ width: Double) -> Double {
+@MainActor private func height(_ md: String, _ size: Double, _ width: Double) -> Double {
     MarkdownRenderer.render(md, style: NoteStyle(fontSize: size))
         .boundingRect(
             with: CGSize(width: width, height: .greatestFiniteMagnitude),
@@ -15,50 +15,50 @@ private func height(_ md: String, _ size: Double, _ width: Double) -> Double {
         ).height.rounded(.up)
 }
 
-@Test func shortNoteUsesMax() {
+@Test @MainActor func shortNoteUsesMax() {
     #expect(
         TextFitter.fit("Hi", maxFontSize: 40, in: box) == FitResult(fontSize: 40, overflows: false))
 }
-@Test func emptyUsesMax() {
+@Test @MainActor func emptyUsesMax() {
     #expect(
         TextFitter.fit("", maxFontSize: 40, in: box) == FitResult(fontSize: 40, overflows: false))
 }
-@Test func longNoteShrinks() {
+@Test @MainActor func longNoteShrinks() {
     let md = (1...8).map { "- point number \($0)" }.joined(separator: "\n")
     let r = TextFitter.fit(md, maxFontSize: 60, in: box)
     #expect(r.fontSize < 60 && r.fontSize >= 14 && !r.overflows)
     #expect(height(md, r.fontSize, box.width) <= box.height)
     #expect(height(md, r.fontSize + 1, box.width) > box.height)
 }
-@Test func hugeNoteOverflowsAtFloor() {
+@Test @MainActor func hugeNoteOverflowsAtFloor() {
     let md = (1...200).map { "- bullet \($0)" }.joined(separator: "\n")
     #expect(
         TextFitter.fit(md, maxFontSize: 40, in: box) == FitResult(fontSize: 14, overflows: true))
 }
-@Test func longUnbrokenWordNeverBelowFloor() {
+@Test @MainActor func longUnbrokenWordNeverBelowFloor() {
     let r = TextFitter.fit(String(repeating: "x", count: 500), maxFontSize: 40, in: box)
     #expect(r.fontSize >= 14)
 }
-@Test func maxBelowFloorTreatedAsFloor() {
+@Test @MainActor func maxBelowFloorTreatedAsFloor() {
     #expect(TextFitter.fit("Hi", maxFontSize: 5, in: box).fontSize == 14)
 }
-@Test func fractionalMaxRoundsDown() {
+@Test @MainActor func fractionalMaxRoundsDown() {
     #expect(TextFitter.fit("Hi", maxFontSize: 40.9, in: box).fontSize == 40)
 }
-@Test func badMaxIsFloor() {
+@Test @MainActor func badMaxIsFloor() {
     for m in [Double.nan, -Double.infinity, -3, 0] {
         #expect(TextFitter.fit("Hi", maxFontSize: m, in: box).fontSize == 14)
     }
 }
-@Test func infiniteMaxIsFloor() {
+@Test @MainActor func infiniteMaxIsFloor() {
     #expect(TextFitter.fit("Hi", maxFontSize: Double.infinity, in: box).fontSize == 14)
 }
-@Test func hugeFiniteMaxIsCapped() {
+@Test @MainActor func hugeFiniteMaxIsCapped() {
     #expect(
         TextFitter.fit("Hi", maxFontSize: 1e300, in: CGSize(width: 5000, height: 5000)).fontSize
             == 120)
 }
-@Test func degenerateBoxOverflowsAtFloor() {
+@Test @MainActor func degenerateBoxOverflowsAtFloor() {
     let bad = [
         CGSize(width: 0, height: 100), CGSize(width: 100, height: 0),
         CGSize(width: -5, height: 100), CGSize(width: 100, height: CGFloat.nan),
@@ -70,17 +70,17 @@ private func height(_ md: String, _ size: Double, _ width: Double) -> Double {
         )
     }
 }
-@Test func emptyAlwaysFitsEvenInDegenerateBox() {
+@Test @MainActor func emptyAlwaysFitsEvenInDegenerateBox() {
     #expect(
         TextFitter.fit("", maxFontSize: 40, in: CGSize(width: 0, height: CGFloat.nan))
             == FitResult(fontSize: 40, overflows: false))
 }
 
-private let markdownGen = Gen.character(in: "a"..."z")
+private let markdownGen = Gen.oneOf(Gen.character(in: "a"..."z"), Gen.always(" "))
     .string(of: 0...60).map { "- " + $0 }.array(of: 0...30)
     .map { $0.joined(separator: "\n") }
 
-@Test func fitIsWithinBounds() async {
+@Test @MainActor func fitIsWithinBounds() async {
     await propertyCheck(
         count: 50, input: markdownGen, Gen.double(in: 1...120), Gen.double(in: 100...1200),
         Gen.double(in: 50...600)
@@ -89,7 +89,7 @@ private let markdownGen = Gen.character(in: "a"..."z")
         #expect(r.fontSize >= 14 && r.fontSize <= max(14, m.rounded(.down)))
     }
 }
-@Test func fitMeansItFits() async {
+@Test @MainActor func fitMeansItFits() async {
     await propertyCheck(
         count: 50, input: markdownGen, Gen.double(in: 1...120), Gen.double(in: 100...1200),
         Gen.double(in: 50...600)
@@ -98,7 +98,7 @@ private let markdownGen = Gen.character(in: "a"..."z")
         if !r.overflows { #expect(height(md, r.fontSize, w) <= h) }
     }
 }
-@Test func overflowOnlyAtFloor() async {
+@Test @MainActor func overflowOnlyAtFloor() async {
     await propertyCheck(
         count: 50, input: markdownGen, Gen.double(in: 1...120), Gen.double(in: 100...1200),
         Gen.double(in: 50...600)

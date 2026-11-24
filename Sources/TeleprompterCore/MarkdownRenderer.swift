@@ -21,7 +21,9 @@ public struct NoteStyle: Sendable {
 /// Turns Markdown notes into an `NSAttributedString` for the notes window.
 ///
 /// Kept in Core and free of any view code so it can be tested headlessly and called
-/// repeatedly (at different sizes) by the shrink-to-fit logic.
+/// repeatedly (at different sizes) by the shrink-to-fit logic. Main-actor isolated because
+/// AppKit text work is not documented as thread-safe.
+@MainActor
 public enum MarkdownRenderer {
     /// Renders `markdown` using `style`.
     ///

@@ -18,7 +18,7 @@ private func paragraphStyle(_ s: NSAttributedString, _ substring: String) -> NSP
         as! NSParagraphStyle
 }
 
-@Suite struct MarkdownRendererTests {
+@MainActor @Suite struct MarkdownRendererTests {
     @Test func plainParagraph() {
         let r = MarkdownRenderer.render("Hello", style: style)
         #expect(r.string == "Hello" && fontAt(r, "Hello").pointSize == 20)
