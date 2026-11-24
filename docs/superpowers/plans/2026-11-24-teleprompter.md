@@ -499,7 +499,7 @@ Run `testslot -- swift test --filter NotesPanelTests`. Expected: FAIL (`NotesPan
   - a full-screen app is in front
 
   Expected: the panel is absent from the recording except during the test toggle, where it has the red border. **Stop the plan if hiding fails**, and go back to the spec's fallback discussion.
-- [ ] **Step 5:** Run `scripts/coverage.sh`. Expected: Core and `NotesPanel.swift` at 100%. Then and lint. Commit ("Add app shell, panel, build script"), push, merge, delete the branch.
+- [ ] **Step 5:** Run `scripts/coverage.sh`. Expected: Core and `NotesPanel.swift` at 100%. Lint. Commit ("Add app shell, panel, build script"), push, merge, delete the branch.
 
 ---
 
