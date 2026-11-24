@@ -211,20 +211,26 @@ private func append(_ url: URL, _ text: String) throws {
         #expect(onMain.withLock { !$0.isEmpty && $0.allSatisfy { $0 } })
     }
 
-    @Test func deletedFileDoesNotCrash() async throws {
+    @Test func vanishedFileReportsOnceAfterGivingUp() async throws {
         let (dir, file) = try makeFile()
         defer { try? FileManager.default.removeItem(at: dir) }
         let rec = Recorder(url: file)
         let watcher = FileWatcher(url: file, queue: queue, onChange: rec.callback)
         defer { watcher.stop() }
 
+        let deleted = ContinuousClock.now
         try FileManager.default.removeItem(at: file)
-        // Retries span 10 x 50 ms; after a full second the watcher has given up quietly.
-        #expect(await !rec.waitUntil(timeout: .seconds(1)) { $0.count > 0 })
+        // Exactly one final callback, after the 10 x 50 ms retry window, so the reader
+        // finds the file missing (NotesStore then switches to scratch).
+        #expect(await rec.waitUntil { $0.count >= 1 })
+        #expect(ContinuousClock.now - deleted >= .milliseconds(450), "fired before the retries")
+        #expect(rec.last == "<missing>")
+        #expect(descriptors(to: file) == 0)
         // Having given up, it stays idle even when the file later reappears.
         try Data("back".utf8).write(to: file)
         try append(file, " again")
-        #expect(await !rec.waitUntil(timeout: .milliseconds(300)) { $0.count > 0 })
+        #expect(await !rec.waitUntil(timeout: .milliseconds(300)) { $0.count > 1 })
+        #expect(rec.count == 1)
         #expect(descriptors(to: file) == 0)
     }
 
@@ -262,15 +268,37 @@ private func append(_ url: URL, _ text: String) throws {
         #expect(descriptors(to: file) == 0)
     }
 
-    @Test func missingFileAtStartIsIdle() async throws {
+    @Test func missingFileAtStartReportsOnceAfterGivingUp() async throws {
         let (dir, _) = try makeFile()
         defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent("absent.md")
         let rec = Recorder(url: file)
+        let started = ContinuousClock.now
         let watcher = FileWatcher(url: file, queue: queue, onChange: rec.callback)
         defer { watcher.stop() }
 
+        #expect(await rec.waitUntil { $0.count >= 1 })
+        #expect(ContinuousClock.now - started >= .milliseconds(450), "fired before the retries")
+        #expect(rec.last == "<missing>")
         try Data("now here".utf8).write(to: file)
-        #expect(await !rec.waitUntil(timeout: .milliseconds(300)) { $0.count > 0 })
+        #expect(await !rec.waitUntil(timeout: .milliseconds(300)) { $0.count > 1 })
+        #expect(descriptors(to: file) == 0)
+    }
+
+    @Test func fileAppearingSoonAfterStartIsWatchedSilently() async throws {
+        let (dir, _) = try makeFile()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("late.md")
+        let rec = Recorder(url: file)
+        let watcher = FileWatcher(url: file, queue: queue, onChange: rec.callback)
+        defer { watcher.stop() }
+
+        try await Task.sleep(for: .milliseconds(150))  // setup: force at least one retry
+        try Data("late".utf8).write(to: file)
+        // No callback for the initial attach, and no give-up callback either.
+        #expect(await !rec.waitUntil(timeout: .milliseconds(700)) { $0.count > 0 })
+        #expect(descriptors(to: file) == 1)
+        try append(file, "!")
+        #expect(await rec.waitUntil { $0.last == "late!" })
     }
 }

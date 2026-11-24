@@ -8,8 +8,9 @@ import Foundation
 /// `.delete`/`.rename`, and then goes silent forever. On those events we drop the old
 /// descriptor and reopen the path (retrying up to 10 × 50 ms, for editors that leave the
 /// path briefly empty), then call `onChange` once the new file is being watched, so a
-/// reader never misses the final content. If the file never comes back we stop silently;
-/// `NotesStore` notices the missing file when it next reads.
+/// reader never misses the final content. If the file never comes back we deliver one
+/// last `onChange` and stop; the reader's reread then finds the file missing, which is
+/// how `NotesStore` learns it must fall back to scratch notes.
 ///
 /// Events are not coalesced: an in-place write can produce several callbacks in a row,
 /// and callers should compare content rather than assume one callback per save.
@@ -22,8 +23,16 @@ public final class FileWatcher: @unchecked Sendable {
     /// Starts watching `url` immediately; `onChange` is delivered asynchronously on
     /// `queue` (main by default, which is what the main-actor `NotesStore` wants).
     ///
-    /// A file that is missing at start is not watched at all: there is nothing to follow,
-    /// and the caller already knows it could not read the file.
+    /// Contract: `onChange` means "re-read the file now". It fires after any change,
+    /// after an atomic replace once the new file is watched, and once after giving up on
+    /// a vanished file (the read then finds it missing). Writes made between the caller's
+    /// initial read and this `init` produce no callback, so read the file *after*
+    /// creating the watcher.
+    ///
+    /// A file missing at start gets the same retry window as one that vanishes later: if
+    /// it appears in time it is watched silently (no callback for the initial attach);
+    /// otherwise the single give-up callback fires. That closes the race where the file
+    /// is deleted between the caller's read and this `init`.
     public init(
         url: URL, queue: DispatchQueue = .main, onChange: @escaping @Sendable () -> Void
     ) {
@@ -36,7 +45,9 @@ public final class FileWatcher: @unchecked Sendable {
     ///
     /// Once it returns, `onChange` will not be called again, even for a change that was
     /// already queued. If a callback is running on another thread at that moment, `stop()`
-    /// waits for it to finish, which is what makes that promise hold.
+    /// waits for it to finish, which is what makes that promise hold. Don't call `stop()`
+    /// from a thread that `onChange` synchronously waits on (`onChange` runs under the
+    /// stop lock).
     public func stop() {
         engine.stop()
     }
@@ -75,9 +86,10 @@ private final class Engine: @unchecked Sendable {
         self.onChange = onChange
     }
 
-    /// Attaches synchronously, so a write made right after `init` returns is seen.
+    /// Attaches synchronously, so a write made right after `init` returns is seen. A missing
+    /// file gets the usual retry window, without a callback if it shows up in time.
     func start() {
-        queue.sync { attach(retriesLeft: 0, notify: false) }
+        queue.sync { attach(retriesLeft: Self.retries, notify: false) }
     }
 
     func stop() {
@@ -95,8 +107,9 @@ private final class Engine: @unchecked Sendable {
     /// Opens `path` and starts a dispatch source on it. Runs on `queue`.
     ///
     /// When the path is missing, it schedules itself again (without blocking any queue)
-    /// until `retriesLeft` runs out, then gives up silently. `notify` is true after a
-    /// replace, so the caller rereads the file that is now being watched.
+    /// until `retriesLeft` runs out, then gives up with one final callback so the caller
+    /// rereads and finds the file gone. `notify` is true after a replace, so the caller
+    /// rereads the file that is now being watched.
     private func attach(retriesLeft: Int, notify: Bool) {
         guard !isStopped else { return }
         let fd = open(path, O_EVTONLY)
@@ -105,6 +118,8 @@ private final class Engine: @unchecked Sendable {
                 queue.asyncAfter(deadline: .now() + Self.retryDelay) { [self] in
                     attach(retriesLeft: retriesLeft - 1, notify: notify)
                 }
+            } else {
+                deliver()
             }
             return
         }
