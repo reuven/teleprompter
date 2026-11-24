@@ -10,7 +10,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-~/.local/bin/testslot -- swift test --enable-code-coverage
+# testslot is the author's local limiter (at most three concurrent test runs on one machine).
+# Without it, run the command directly.
+slot() {
+  if [ -x "$HOME/.local/bin/testslot" ]; then
+    "$HOME/.local/bin/testslot" -- "$@"
+  else
+    echo "note: ~/.local/bin/testslot not found; running directly" >&2
+    "$@"
+  fi
+}
+
+slot swift test --enable-code-coverage
 json="$(swift test --show-codecov-path)"
 
 # Prints "<file> <percent>" for each gated file; -1 when the percent is missing.
