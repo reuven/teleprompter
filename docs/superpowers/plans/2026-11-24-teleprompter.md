@@ -520,7 +520,7 @@ Run `testslot -- swift test --filter NotesPanelTests`. Expected: FAIL (`NotesPan
 
 - [x] **Step 1:** Create a branch: `feat/views-hotkey`.
 - [x] **Step 2:** Implement per the Interfaces block. The launch mode is `ModeState.initial(hasNotes: !store.text.isEmpty)`.
-- [ ] **Step 3:** Build and run. Manually check:
+- [x] **Step 3:** Build and run. Manually check:
   1. Type Markdown in edit mode.
   2. Press ⌃⌥⌘N from Safari. Expected: the rendered view appears, and Safari keeps focus and keeps receiving typing.
   3. Click through the panel onto Safari content. Expected: Safari gets the click.
@@ -548,7 +548,7 @@ Run `testslot -- swift test --filter NotesPanelTests`. Expected: FAIL (`NotesPan
 
 - [x] **Step 1:** Create a branch: `feat/menus`.
 - [x] **Step 2:** Implement the behavior above.
-- [ ] **Step 3:** Build and run. Manually check:
+- [x] **Step 3:** Build and run. Manually check:
   1. Open a `.md` file, edit it in BBEdit or VS Code, and save. Expected: the panel updates.
   2. Edit in the panel. Expected: the file changes on disk.
   3. Delete the file. Expected: the error appears in the menu and the app falls back to scratch.
@@ -562,14 +562,14 @@ Run `testslot -- swift test --filter NotesPanelTests`. Expected: FAIL (`NotesPan
 
 **Files:** Create `docs/manual-checklist.md`; modify `README.md`
 
-- [ ] **Step 1:** Create a branch: `release/0.1.0`.
-- [ ] **Step 2:** Write `docs/manual-checklist.md`, consolidating the manual checks from Tasks 8–10 into one list, with the ScreenFlow recording check first.
-- [ ] **Step 3:** Update `README.md` with:
+- [x] **Step 1:** Create a branch: `release/0.1.0`.
+- [x] **Step 2:** Write `docs/manual-checklist.md`, consolidating the manual checks from Tasks 8–10 into one list, with the ScreenFlow recording check first.
+- [x] **Step 3:** Update `README.md` with:
   - installing from a release zip (approving it in System Settings › Privacy & Security, since it isn't notarized)
   - building from source (`scripts/build-app.sh`)
   - usage and the ⌃⌥⌘N shortcut
   - the "re-check after macOS/ScreenFlow updates" note
-- [ ] **Step 4:** Mutation testing. Try installing Muter (`brew install muter-mutation-testing/formulae/muter`) and run it on `TeleprompterCore`. If it works, close real logic gaps with tests. If it doesn't support Swift 6.3, note that in `README.md` under Development and move on.
-- [ ] **Step 5:** Run the full gate: `scripts/coverage.sh`. Expected: exit 0. Check the exit status directly; don't chain it with `&&`.
-- [ ] **Step 6:** Run every item in `docs/manual-checklist.md` with Reuven.
-- [ ] **Step 7:** Merge into main. Tag `v0.1.0` and push the tag. Then `rm -rf dist && mkdir dist`, run `scripts/build-app.sh`, `ditto -c -k --keepParent build/Teleprompter.app dist/Teleprompter-0.1.0.zip`, and `gh release create v0.1.0 dist/Teleprompter-0.1.0.zip --notes-file <(release notes)`. Delete the release branch.
+- [x] **Step 4:** Mutation testing. Try installing Muter (`brew install muter-mutation-testing/formulae/muter`) and run it on `TeleprompterCore`. If it works, close real logic gaps with tests. If it doesn't support Swift 6.3, note that in `README.md` under Development and move on.
+- [x] **Step 5:** Run the full gate: `scripts/coverage.sh`. Expected: exit 0. Check the exit status directly; don't chain it with `&&`.
+- [x] **Step 6:** Run every item in `docs/manual-checklist.md` with Reuven. (2026-11-24: sections 1–4 passed; 5–7 tracked in TODO.md)
+- [x] **Step 7:** Merge into main. Tag `v0.1.0` and push the tag. Then `rm -rf dist && mkdir dist`, run `scripts/build-app.sh`, `ditto -c -k --keepParent build/Teleprompter.app dist/Teleprompter-0.1.0.zip`, and `gh release create v0.1.0 dist/Teleprompter-0.1.0.zip --notes-file <(release notes)`. Delete the release branch.
