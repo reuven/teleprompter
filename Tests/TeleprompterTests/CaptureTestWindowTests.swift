@@ -21,13 +21,13 @@ private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
     #expect(w.frame.maxY == panel.minY - CaptureTestWindow.gap)
 }
 
-@Test func flipsAbovePanelWhenNoRoomBelow() {
+@MainActor @Test func flipsAbovePanelWhenNoRoomBelow() {
     let panel = CGRect(x: 100, y: 100, width: 640, height: 200)
     let f = CaptureTestWindow.frame(near: panel, within: screen)
     #expect(f.minY == panel.maxY + CaptureTestWindow.gap && f.size == panel.size)
 }
 
-@Test func staysInsideVisibleFrame() {
+@MainActor @Test func staysInsideVisibleFrame() {
     // Panel hanging off the right edge and taller than the room above and below it.
     let panel = CGRect(x: 1000, y: 100, width: 640, height: 700)
     let f = CaptureTestWindow.frame(near: panel, within: screen)
@@ -35,7 +35,7 @@ private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
     #expect(f.maxX == screen.maxX && f.maxY == screen.maxY)
 }
 
-@Test func usesScreenOffsetsForSecondaryDisplays() {
+@MainActor @Test func usesScreenOffsetsForSecondaryDisplays() {
     let second = CGRect(x: 1440, y: -200, width: 1920, height: 1055)
     let panel = CGRect(x: 2000, y: 600, width: 640, height: 200)
     let f = CaptureTestWindow.frame(near: panel, within: second)
