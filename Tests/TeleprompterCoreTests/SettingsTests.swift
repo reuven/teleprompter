@@ -66,3 +66,33 @@ import Testing
     let s = try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))
     #expect(s == Settings())
 }
+
+@Test func opacityInfinityAndHugeSnapToNearestEnd() {
+    #expect(Settings(opacity: .infinity).opacity == 1.0)
+    #expect(Settings(opacity: 1e300).opacity == 1.0)
+    #expect(Settings(opacity: -.infinity).opacity == 0.5)
+}
+
+@Test func wrongTypedKeyDegradesAlone() throws {
+    let json = Data(
+        #"{"fontSize":"big","opacity":0.5,"recentFiles":["file:///tmp/a.md","file:///tmp/b.md"]}"#
+            .utf8)
+    let s = try JSONDecoder().decode(Settings.self, from: json)
+    #expect(s.fontSize == 32 && s.opacity == 0.5)
+    #expect(s.recentFiles == [URL(string: "file:///tmp/a.md")!, URL(string: "file:///tmp/b.md")!])
+}
+
+@Test func invalidRecentsArrayBecomesEmpty() throws {
+    let s = try JSONDecoder().decode(Settings.self, from: Data(#"{"recentFiles":"nope"}"#.utf8))
+    #expect(s.recentFiles.isEmpty)
+}
+
+@Test func mutationStaysNormalized() {
+    var s = Settings()
+    s.fontSize = 500
+    #expect(s.fontSize == 120)
+    s.opacity = .nan
+    #expect(s.opacity == 0.85)
+    s.opacity = 0.6
+    #expect(s.opacity == 0.5)
+}

@@ -21,10 +21,20 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Maximum number of remembered recent files.
     public static let maxRecentFiles = 5
 
-    public private(set) var fontSize: Double
-    public private(set) var opacity: Double
+    /// Text size in points. Settable by the UI; always re-normalized so a bad write cannot stick.
+    public var fontSize: Double {
+        didSet { fontSize = Settings.normalizedFontSize(fontSize) }
+    }
+    /// Window opacity. Settable by the UI; always snapped to a preset so the menu stays truthful.
+    public var opacity: Double {
+        didSet { opacity = Settings.normalizedOpacity(opacity) }
+    }
+    /// Last window position and size, restored at launch; nil until the user has moved it.
     public var windowFrame: CGRect?
+    /// File to reopen at launch; nil when nothing has been opened.
     public var lastFileURL: URL?
+    /// Recently opened files for the menu, most recent first; changed only via `noteOpened`
+    /// so the cap and no-duplicates rules always hold.
     public private(set) var recentFiles: [URL]
 
     /// Creates settings, normalizing every value so the result is always valid.
@@ -46,13 +56,13 @@ public struct Settings: Codable, Sendable, Equatable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            fontSize: try c.decodeIfPresent(Double.self, forKey: .fontSize)
+            fontSize: (try? c.decodeIfPresent(Double.self, forKey: .fontSize))
                 ?? Settings.defaultFontSize,
-            opacity: try c.decodeIfPresent(Double.self, forKey: .opacity)
+            opacity: (try? c.decodeIfPresent(Double.self, forKey: .opacity))
                 ?? Settings.defaultOpacity,
-            windowFrame: try c.decodeIfPresent(CGRect.self, forKey: .windowFrame),
-            lastFileURL: try c.decodeIfPresent(URL.self, forKey: .lastFileURL),
-            recentFiles: try c.decodeIfPresent([URL].self, forKey: .recentFiles) ?? []
+            windowFrame: (try? c.decodeIfPresent(CGRect.self, forKey: .windowFrame)) ?? nil,
+            lastFileURL: (try? c.decodeIfPresent(URL.self, forKey: .lastFileURL)) ?? nil,
+            recentFiles: (try? c.decodeIfPresent([URL].self, forKey: .recentFiles)) ?? nil ?? []
         )
     }
 
@@ -69,8 +79,10 @@ public struct Settings: Codable, Sendable, Equatable {
 
     private static func normalizedOpacity(_ value: Double) -> Double {
         guard !value.isNaN else { return defaultOpacity }
+        // Clamp first: for +/-infinity or huge values every distance ties and the first preset would win.
+        let v = min(max(value, 0), 1)
         return opacityPresets.dropFirst().reduce(opacityPresets[0]) { best, p in
-            abs(p - value) < abs(best - value) ? p : best
+            abs(p - v) < abs(best - v) ? p : best
         }
     }
 
@@ -88,6 +100,7 @@ public final class SettingsStore: @unchecked Sendable {
     private let defaults: UserDefaults
     private static let key = "settings.v1"
 
+    /// Takes the defaults suite as a parameter so tests can inject a throwaway one.
     public init(defaults: UserDefaults) {
         self.defaults = defaults
     }
