@@ -115,6 +115,36 @@ private func contents(_ url: URL) throws -> String {
         #expect(store.source == .file(file))
     }
 
+    /// A symlink in this test's directory pointing at `target`.
+    func makeLink(to target: URL, name: String = "link.md") throws -> URL {
+        let link = dir.appendingPathComponent(name)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        return link
+    }
+
+    @Test func editThroughASymlinkSavesToTheTargetAndKeepsTheLink() async throws {
+        let file = try makeFile("old")
+        let link = try makeLink(to: file)
+        let store = makeStore()
+        store.open(link)
+        #expect(store.source == .file(file), "the resolved file is the source")
+        store.userEdited("new")
+        await store.flush()
+        #expect(try contents(file) == "new")
+        let type = try FileManager.default.attributesOfItem(atPath: link.path)[.type]
+        #expect(type as? FileAttributeType == .typeSymbolicLink, "the link is still a link")
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == file.path)
+    }
+
+    @Test func externalChangeToASymlinkedTargetReloads() async throws {
+        let file = try makeFile("old")
+        let store = makeStore()
+        store.open(try makeLink(to: file))
+        try atomicReplace(file, with: Data("ext".utf8))
+        #expect(await waitUntil { self.changes.count >= 1 })
+        #expect(store.text == "ext")
+    }
+
     @Test func ownSaveDoesNotTriggerReload() async throws {
         let file = try makeFile("old")
         let store = makeStore()

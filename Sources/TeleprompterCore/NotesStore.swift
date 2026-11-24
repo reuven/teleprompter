@@ -152,10 +152,16 @@ public enum NotesSource: Equatable, Sendable {
     ///
     /// Also refused, with a message: the scratch file itself (by any path or symlink), which
     /// would make one file two sources, and files over `maxFileSize`.
-    public func open(_ url: URL) {
+    ///
+    /// A symlink is resolved first, and the target is what's watched, saved, and reported as
+    /// `source`: an atomic save writes a temporary file and renames it over the path, so saving
+    /// through the link would replace the link itself with a regular file and leave the real
+    /// file behind, unchanged.
+    public func open(_ requested: URL) {
+        let url = Self.resolved(requested)
         if Self.isSameFile(url, scratchURL) {
             lastError =
-                "“\(url.lastPathComponent)” holds the scratch notes; they're shown whenever no file is open."
+                "“\(requested.lastPathComponent)” holds the scratch notes; they're shown whenever no file is open."
             return
         }
         savePendingNow()
@@ -177,7 +183,7 @@ public enum NotesSource: Equatable, Sendable {
             lastError = dropped
         case .failure(let failure):
             newWatcher.stop()
-            lastError = Self.message("Couldn't open", url, failure)
+            lastError = Self.message("Couldn't open", requested, failure)
         }
     }
 
