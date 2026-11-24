@@ -81,9 +81,9 @@ docs/manual-checklist.md  Pre-release manual checks (incl. ScreenFlow)
   - `public mutating func setCaptureVisible(_ visible: Bool)`
   - `scripts/coverage.sh`: exit 0 only if every file under `Sources/TeleprompterCore/` has 100% line coverage.
 
-- [ ] **Step 1:** Create a branch: `git switch -c feat/skeleton`
-- [ ] **Step 2:** Write `Package.swift`: tools 6.2, `platforms: [.macOS(.v26)]`, dependency `.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.9.0")`, library target `TeleprompterCore` (depends on `Markdown`), executable target `Teleprompter` (depends on Core), test target `TeleprompterCoreTests`.
-- [ ] **Step 3: Write failing tests** in `ModeTests.swift` (Swift Testing):
+- [x] **Step 1:** Create a branch: `git switch -c feat/skeleton`
+- [x] **Step 2:** Write `Package.swift`: tools 6.2, `platforms: [.macOS(.v26)]`, dependency `.package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.9.0")`, library target `TeleprompterCore` (depends on `Markdown`), executable target `Teleprompter` (depends on Core), test target `TeleprompterCoreTests`.
+- [x] **Step 3: Write failing tests** in `ModeTests.swift` (Swift Testing):
 
 ```swift
 @Test func startsInRecordingWhenNotesExist() {
@@ -107,13 +107,13 @@ docs/manual-checklist.md  Pre-release manual checks (incl. ScreenFlow)
 }
 ```
 
-- [ ] **Step 4:** Run `~/.local/bin/testslot -- swift test --filter ModeTests`. Expected: compile FAIL (`ModeState` not found).
-- [ ] **Step 5:** Implement `Mode.swift` per the Interfaces block.
-- [ ] **Step 6:** Run the same command. Expected: 5 tests PASS.
-- [ ] **Step 7:** Write `scripts/coverage.sh` (`set -euo pipefail`). Run `swift test --enable-code-coverage` via testslot, get the JSON path from `swift test --show-codecov-path`, then use `jq` to select files whose `filename` contains `/Sources/TeleprompterCore/`. Print each file's `summary.lines.percent`, and exit 1 if any is below 100. Make it executable.
-- [ ] **Step 8:** Run `scripts/coverage.sh`. Expected: `Mode.swift 100` and exit 0. Then temporarily comment out one test and confirm it exits 1. Restore the test.
-- [ ] **Step 9:** Run `swift format lint --strict -r Sources Tests`. Expected: no output.
-- [ ] **Step 10:** Commit ("Add package skeleton, mode state, coverage gate"), push, and merge into main. Delete the branch.
+- [x] **Step 4:** Run `~/.local/bin/testslot -- swift test --filter ModeTests`. Expected: compile FAIL (`ModeState` not found).
+- [x] **Step 5:** Implement `Mode.swift` per the Interfaces block.
+- [x] **Step 6:** Run the same command. Expected: 5 tests PASS.
+- [x] **Step 7:** Write `scripts/coverage.sh` (`set -euo pipefail`). Run `swift test --enable-code-coverage` via testslot, get the JSON path from `swift test --show-codecov-path`, then use `jq` to select files whose `filename` contains `/Sources/TeleprompterCore/`. Print each file's `summary.lines.percent`, and exit 1 if any is below 100. Make it executable.
+- [x] **Step 8:** Run `scripts/coverage.sh`. Expected: `Mode.swift 100` and exit 0. Then temporarily comment out one test and confirm it exits 1. Restore the test.
+- [x] **Step 9:** Run `swift format lint --strict -r Sources Tests`. Expected: no output.
+- [x] **Step 10:** Commit ("Add package skeleton, mode state, coverage gate"), push, and merge into main. Delete the branch.
 
 ---
 
@@ -134,8 +134,8 @@ docs/manual-checklist.md  Pre-release manual checks (incl. ScreenFlow)
   - `public static let minFontSize: Double = 14`
   - `public final class SettingsStore: @unchecked Sendable { public init(defaults: UserDefaults); public func load() -> Settings; public func save(_ s: Settings) }`. Stores JSON under key `"settings.v1"`. Missing or undecodable data → `Settings()`.
 
-- [ ] **Step 1:** Create a branch: `feat/settings`. In `Package.swift`, add the `swift-property-based` dependency (Global Constraints) to `TeleprompterCoreTests`. Also harden `scripts/coverage.sh`: a missing or non-numeric `percent` must fail the gate (have jq select `(.summary.lines.percent // -1)` and test with `>= 100` numerically). Confirm by running the script once with a deliberately uncovered function and checking `echo $?` prints `1` (not through a pipe). Remove the function.
-- [ ] **Step 2: Write failing tests:**
+- [x] **Step 1:** Create a branch: `feat/settings`. In `Package.swift`, add the `swift-property-based` dependency (Global Constraints) to `TeleprompterCoreTests`. Also harden `scripts/coverage.sh`: a missing or non-numeric `percent` must fail the gate (have jq select `(.summary.lines.percent // -1)` and test with `>= 100` numerically). Confirm by running the script once with a deliberately uncovered function and checking `echo $?` prints `1` (not through a pipe). Remove the function.
+- [x] **Step 2: Write failing tests:**
 
 ```swift
 @Test func defaults() { let s = Settings(); #expect(s.fontSize == 32 && s.opacity == 0.85 && s.recentFiles.isEmpty) }
@@ -179,10 +179,10 @@ Add these properties, in `SettingsPropertyTests.swift`:
 @Test func nanOpacityIsDefault()           // Settings(opacity: .nan).opacity == 0.85
 ```
 
-- [ ] **Step 3:** Run `testslot -- swift test --filter SettingsTests`. Expected: FAIL (not defined).
-- [ ] **Step 4:** Implement `Settings.swift`. Watch out: Swift's `min`/`max` pass NaN through, so non-finite values need their own check before clamping. Decoding uses `decodeIfPresent` with the defaults, then the same normalization the initializer uses.
-- [ ] **Step 5:** Run the tests. Expected: PASS. Then `scripts/coverage.sh` passes.
-- [ ] **Step 6:** Lint, commit ("Add validated settings and store"), push, merge, delete the branch.
+- [x] **Step 3:** Run `testslot -- swift test --filter SettingsTests`. Expected: FAIL (not defined).
+- [x] **Step 4:** Implement `Settings.swift`. Watch out: Swift's `min`/`max` pass NaN through, so non-finite values need their own check before clamping. Decoding uses `decodeIfPresent` with the defaults, then the same normalization the initializer uses.
+- [x] **Step 5:** Run the tests. Expected: PASS. Then `scripts/coverage.sh` passes.
+- [x] **Step 6:** Lint, commit ("Add validated settings and store"), push, merge, delete the branch.
 
 ---
 
@@ -199,8 +199,8 @@ Add these properties, in `SettingsPropertyTests.swift`:
   - `public static func defaultFrame(on screen: ScreenInfo) -> CGRect`. Horizontally centered on `visibleFrame`, top edge 8 pt below `visibleFrame.maxY` (so below the menu bar and notch).
   - `public static func restoredFrame(saved: CGRect?, screens: [ScreenInfo]) -> CGRect?`. Returns `saved` only if at least 50% of its area intersects some screen's `visibleFrame`; otherwise nil.
 
-- [ ] **Step 1:** Create a branch: `feat/placement`.
-- [ ] **Step 2: Write failing tests:**
+- [x] **Step 1:** Create a branch: `feat/placement`.
+- [x] **Step 2: Write failing tests:**
 
 ```swift
 let builtIn = ScreenInfo(frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
@@ -238,10 +238,10 @@ Property (Review Focus #3), in the same file:
     // for random visibleFrames at least as big as defaultSize: visibleFrame.contains(defaultFrame(on:))
 ```
 
-- [ ] **Step 3:** Run `testslot -- swift test --filter PlacementTests`. Expected: FAIL.
-- [ ] **Step 4:** Implement `Placement.swift`.
-- [ ] **Step 5:** Run the tests and then `scripts/coverage.sh`. Expected: both PASS.
-- [ ] **Step 6:** Lint, commit ("Add window placement logic"), push, merge, delete the branch.
+- [x] **Step 3:** Run `testslot -- swift test --filter PlacementTests`. Expected: FAIL.
+- [x] **Step 4:** Implement `Placement.swift`.
+- [x] **Step 5:** Run the tests and then `scripts/coverage.sh`. Expected: both PASS.
+- [x] **Step 6:** Lint, commit ("Add window placement logic"), push, merge, delete the branch.
 
 ---
 
@@ -266,8 +266,8 @@ Rendering rules (headings scale with `fontSize`, so shrink-to-fit scales everyth
 | InlineCode | monospaced system font at `fontSize` |
 | Link, image, table, HTML, code block | their plain text content only, at `fontSize` |
 
-- [ ] **Step 1:** Create a branch: `feat/markdown`.
-- [ ] **Step 2: Write failing tests.** Add a helper `fontAt(_ s: NSAttributedString, _ substring: String) -> NSFont`.
+- [x] **Step 1:** Create a branch: `feat/markdown`.
+- [x] **Step 2: Write failing tests.** Add a helper `fontAt(_ s: NSAttributedString, _ substring: String) -> NSFont`.
 
 ```swift
 let style = NoteStyle(fontSize: 20)
@@ -291,10 +291,10 @@ let style = NoteStyle(fontSize: 20)
     #expect(r.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == .red) }
 ```
 
-- [ ] **Step 3:** Run `testslot -- swift test --filter MarkdownRendererTests`. Expected: FAIL.
-- [ ] **Step 4:** Implement with a private `struct AttributedStringBuilder: MarkupWalker` that tracks a trait stack (bold/italic) and list depth/index while walking a `Document(parsing:)`. Elements not overridden fall through to `descendInto`, which yields their plain text.
-- [ ] **Step 5:** Run the tests and then `scripts/coverage.sh`. Expected: both PASS.
-- [ ] **Step 6:** Lint, commit ("Add Markdown renderer"), push, merge, delete the branch.
+- [x] **Step 3:** Run `testslot -- swift test --filter MarkdownRendererTests`. Expected: FAIL.
+- [x] **Step 4:** Implement with a private `struct AttributedStringBuilder: MarkupWalker` that tracks a trait stack (bold/italic) and list depth/index while walking a `Document(parsing:)`. Elements not overridden fall through to `descendInto`, which yields their plain text.
+- [x] **Step 5:** Run the tests and then `scripts/coverage.sh`. Expected: both PASS.
+- [x] **Step 6:** Lint, commit ("Add Markdown renderer"), push, merge, delete the branch.
 
 ---
 
@@ -312,8 +312,8 @@ let style = NoteStyle(fontSize: 20)
     - If nothing fits at `minFontSize`, returns `(minFontSize, overflows: true)`.
     - If `maxFontSize < minFontSize`, treats max as min.
 
-- [ ] **Step 1:** Create a branch: `feat/fit`.
-- [ ] **Step 2: Write failing tests:**
+- [x] **Step 1:** Create a branch: `feat/fit`.
+- [x] **Step 2: Write failing tests:**
 
 ```swift
 let box = CGSize(width: 600, height: 180)
@@ -350,10 +350,10 @@ Properties (Review Focus #5), with `count: 50` because each check renders text:
     // same inputs: if r.overflows { r.fontSize == 14 }
 ```
 
-- [ ] **Step 3:** Run `testslot -- swift test --filter TextFitterTests`. Expected: FAIL.
-- [ ] **Step 4:** Implement `TextFitter.swift`.
-- [ ] **Step 5:** Run the tests and then `scripts/coverage.sh`. Expected: both PASS.
-- [ ] **Step 6:** Lint, commit ("Add shrink-to-fit"), push, merge, delete the branch.
+- [x] **Step 3:** Run `testslot -- swift test --filter TextFitterTests`. Expected: FAIL.
+- [x] **Step 4:** Implement `TextFitter.swift`.
+- [x] **Step 5:** Run the tests and then `scripts/coverage.sh`. Expected: both PASS.
+- [x] **Step 6:** Lint, commit ("Add shrink-to-fit"), push, merge, delete the branch.
 
 ---
 
