@@ -163,6 +163,7 @@ private func contents(_ url: URL) throws -> String {
         try FileManager.default.removeItem(at: file)
         #expect(await waitUntil { store.source == .scratch })
         #expect(store.lastError?.contains("gone-soon.md") == true)
+        #expect(store.lastError?.contains("discarded") == false, "nothing was pending")
     }
 
     @Test func scratchRoundTripsAnyUnicode() async {
@@ -232,24 +233,76 @@ private func contents(_ url: URL) throws -> String {
         #expect(store.lastError == nil)
     }
 
-    @Test func unreadableScratchSetsError() throws {
+    @Test func unreadableScratchIsKeptAside() async throws {
         try FileManager.default.createDirectory(
             at: scratchURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data([0xFF, 0xFE, 0x00]).write(to: scratchURL)
         let store = makeStore()
         #expect(store.text == "")
-        #expect(store.lastError?.contains("scratch.md") == true)
+        let error = try #require(store.lastError)
+        #expect(error.contains("scratch.md"))
+
+        // The unreadable file is kept aside, not wiped by the first keystroke.
+        let support = scratchURL.deletingLastPathComponent()
+        let aside = try FileManager.default.contentsOfDirectory(atPath: support.path)
+            .filter { $0 != "scratch.md" }
+        try #require(aside.count == 1)
+        #expect(aside[0].wholeMatch(of: /scratch\.md\.unreadable-\d{8}-\d{6}/) != nil)
+        #expect(error.contains(aside[0]))
+        store.userEdited("fresh")
+        await store.flush()
+        #expect(try contents(scratchURL) == "fresh")
+        #expect(
+            try Data(contentsOf: support.appendingPathComponent(aside[0]))
+                == Data([0xFF, 0xFE, 0x00]))
     }
 
-    @Test func failedScratchSaveSetsError() async throws {
-        // The scratch file's "directory" is a regular file, so nothing can be created there.
+    @Test func unmovableUnreadableScratchIsNeverOverwritten() async throws {
+        let support = scratchURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        try Data([0xFF, 0xFE, 0x00]).write(to: scratchURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o555], ofItemAtPath: support.path)
+        let store = makeStore()
+        let error = try #require(store.lastError)
+        #expect(error.contains("scratch.md") && error.contains("relaunch"))
+        store.userEdited("typed")
+        await store.flush()
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: support.path)
+        await store.flush()
+        #expect(try Data(contentsOf: scratchURL) == Data([0xFF, 0xFE, 0x00]))
+        #expect(store.text == "typed")
+    }
+
+    @Test func failedScratchSaveSetsErrorAndRetries() async throws {
+        // No scratch file yet, and its directory is read-only, so the write itself fails.
+        let support = scratchURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o555], ofItemAtPath: support.path)
+        let store = makeStore()
+        #expect(store.lastError == nil)
+        store.userEdited("kept?")
+        await store.flush()
+        #expect(store.lastError?.contains("scratch.md") == true)
+        #expect(store.text == "kept?", "the user's text stays on screen")
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: support.path)
+        await store.flush()
+        #expect(try contents(scratchURL) == "kept?")
+    }
+
+    @Test func scratchBehindARegularFileIsNotSaved() async throws {
+        // The scratch file's "directory" is a regular file: unreadable and unmovable.
         let blocker = try makeFile("x", name: "blocker")
         let store = NotesStore(
             scratchURL: blocker.appendingPathComponent("scratch.md"), saveDelay: .milliseconds(10))
-        store.userEdited("lost?")
+        #expect(store.lastError?.contains("relaunch") == true)
+        store.userEdited("typed")
         await store.flush()
-        #expect(store.lastError?.contains("scratch.md") == true)
-        #expect(store.text == "lost?", "the user's text stays on screen")
+        #expect(store.text == "typed")
+        #expect(try contents(blocker) == "x")
     }
 
     @Test func failedFileSaveSetsError() async throws {
@@ -265,6 +318,82 @@ private func contents(_ url: URL) throws -> String {
         await store.flush()
         #expect(store.lastError?.contains("locked.md") == true)
         #expect(try contents(file) == "old")
+    }
+
+    /// Makes `locked/locked.md` holding "old", opens it, then makes it unwritable.
+    func openLockedFile(_ store: NotesStore) throws -> (dir: URL, file: URL) {
+        let sub = dir.appendingPathComponent("locked")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        let file = sub.appendingPathComponent("locked.md")
+        try Data("old".utf8).write(to: file)
+        store.open(file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: sub.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: file.path)
+        return (sub, file)
+    }
+
+    func unlock(_ locked: (dir: URL, file: URL)) throws {
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: locked.dir.path)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o644], ofItemAtPath: locked.file.path)
+    }
+
+    @Test func failedSaveIsRetriedByFlush() async throws {
+        let store = makeStore()
+        let locked = try openLockedFile(store)
+        store.userEdited("new")
+        await store.flush()
+        #expect(store.lastError != nil)
+        try unlock(locked)
+        await store.flush()
+        #expect(try contents(locked.file) == "new")
+    }
+
+    @Test func failedSaveIsRetriedByCloseFile() async throws {
+        let store = makeStore()
+        let locked = try openLockedFile(store)
+        store.userEdited("new")
+        await store.flush()
+        try unlock(locked)
+        store.closeFile()
+        #expect(try contents(locked.file) == "new")
+    }
+
+    @Test func closeFileReportsEditsItCouldNotSave() async throws {
+        let store = makeStore()
+        let locked = try openLockedFile(store)
+        store.userEdited("new")
+        await store.flush()
+        store.closeFile()
+        #expect(store.source == .scratch)
+        let error = try #require(store.lastError)
+        #expect(error.contains("locked.md") && error.contains("discarded"))
+        try unlock(locked)
+        await store.flush()
+        #expect(try contents(locked.file) == "old", "a discarded save stays discarded")
+    }
+
+    @Test func openReportsScratchEditsItCouldNotSave() async throws {
+        let blocker = try makeFile("x", name: "blocker")
+        let store = NotesStore(
+            scratchURL: blocker.appendingPathComponent("scratch.md"), saveDelay: .seconds(30))
+        store.userEdited("scratch typing")
+        store.open(try makeFile("f"))
+        #expect(store.source == .file(dir.appendingPathComponent("talk.md")))
+        let error = try #require(store.lastError)
+        #expect(error.contains("scratch.md") && error.contains("discarded"))
+    }
+
+    @Test func failedSaveIsKeptWhenOpenFails() async throws {
+        let store = makeStore()
+        let locked = try openLockedFile(store)
+        store.userEdited("new")
+        await store.flush()
+        store.open(dir.appendingPathComponent("nowhere.md"))
+        try unlock(locked)
+        await store.flush()
+        #expect(try contents(locked.file) == "new")
     }
 
     @Test func successfulOpenClearsError() throws {
@@ -390,9 +519,62 @@ private func contents(_ url: URL) throws -> String {
         store.open(file)
         try atomicReplace(file, with: Data([0xFF, 0xFE, 0x00]))
         #expect(await waitUntil { store.lastError != nil })
+        store.userEdited("held")
         try atomicReplace(file, with: Data("fixed".utf8))
         #expect(await waitUntil { store.text == "fixed" })
         #expect(store.lastError == nil)
+        await store.flush()
+        #expect(try contents(file) == "fixed", "the other editor's fix wins over held edits")
+        store.userEdited("resumed")
+        await store.flush()
+        #expect(try contents(file) == "resumed")
+    }
+
+    @Test func failedReloadSuspendsSavingToFile() async throws {
+        let file = try makeFile("good")
+        let store = makeStore(saveDelay: .seconds(30))
+        store.open(file)
+        store.userEdited("mine")
+        let theirs = Data([0xFF, 0xFE, 0x00])
+        try atomicReplace(file, with: theirs)
+        #expect(await waitUntil { store.lastError != nil })
+        let error = try #require(store.lastError)
+        #expect(error.contains("talk.md") && error.contains("not being saved"))
+        await store.flush()
+        #expect(try Data(contentsOf: file) == theirs)
+        store.userEdited("more")
+        await store.flush()
+        #expect(try Data(contentsOf: file) == theirs)
+        #expect(store.text == "more", "edits stay on screen")
+    }
+
+    @Test func revertAfterFailedReloadResumesSaving() async throws {
+        let file = try makeFile("good")
+        let store = makeStore()
+        store.open(file)
+        try atomicReplace(file, with: Data([0xFF, 0xFE, 0x00]))
+        #expect(await waitUntil { store.lastError != nil })
+        store.userEdited("held")
+        await store.flush()
+        // The other program puts back exactly the bytes we know.
+        try atomicReplace(file, with: Data("good".utf8))
+        #expect(await waitUntil { store.lastError == nil })
+        #expect(await waitUntil { (try? contents(file)) == "held" }, "held edits are saved")
+        #expect(store.text == "held")
+        #expect(changes.count == 0)
+    }
+
+    @Test func revertWithNoHeldEditsJustClearsError() async throws {
+        let file = try makeFile("good")
+        let store = makeStore()
+        store.open(file)
+        try atomicReplace(file, with: Data([0xFF, 0xFE, 0x00]))
+        #expect(await waitUntil { store.lastError != nil })
+        try atomicReplace(file, with: Data("good".utf8))
+        #expect(await waitUntil { store.lastError == nil })
+        store.userEdited("after")
+        await store.flush()
+        #expect(try contents(file) == "after")
     }
 
     @Test func unreadableOpenErrorNamesFileNotContents() throws {
@@ -419,6 +601,7 @@ private func contents(_ url: URL) throws -> String {
         #expect(changes.count == 1, "the UI must be told to refresh")
         let error = try #require(store.lastError)
         #expect(error.contains("gone.md") && !error.contains("\n"))
+        #expect(error.contains("discarded"), "the pending edit was lost; say so")
 
         await store.flush()
         store.userEdited("later")

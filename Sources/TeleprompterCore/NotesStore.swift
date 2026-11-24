@@ -17,17 +17,27 @@ public enum NotesSource: Equatable, Sendable {
 ///
 /// Why it exists: the failure to avoid is silent data loss, either losing what the user
 /// typed or clobbering a file another editor just saved. So:
-/// - Edits are saved after a short debounce (`saveDelay`), always with atomic writes, and
-///   any pending save is written before switching sources, so nothing typed is dropped.
+/// - Edits are saved after a short debounce (`saveDelay`), always with atomic writes. A
+///   failed save stays pending, so `flush()` or a source switch retries it; if it still
+///   can't be written when the source switches, it is dropped and `lastError` says so.
 /// - An open file is watched; a change made by *another* program reloads `text` and calls
 ///   `onExternalChange`. Our own saves are recognized by their exact bytes and ignored.
 /// - Last write wins (accepted in the spec): if another program changes the file while one
 ///   of our saves is still pending, the external change wins and the pending save is
 ///   cancelled, because silently overwriting a deliberate save in another editor is worse
 ///   than dropping the last fraction of a second of typing that the reload replaces anyway.
+/// - If a reload can't read the file (not UTF-8, no permission), saving to it is suspended:
+///   we can't tell what another program put there, so we must not overwrite it. Edits stay
+///   on screen and are held. If the file goes back to exactly the bytes we last knew, the
+///   held edits are saved and saving resumes. If it becomes readable with new content, that
+///   content wins (as above) and the held edits are dropped.
 /// - If the open file vanishes for good, the store falls back to scratch and reports it in
-///   `lastError`. It never recreates the vanished file by saving to it.
-/// - Scratch text is never overwritten by file contents; `closeFile()` returns to it.
+///   `lastError` (including whether unsaved edits were dropped). It never recreates the
+///   vanished file by saving to it.
+/// - Scratch text is never overwritten by file contents; `closeFile()` returns to it. A
+///   scratch file that exists but can't be read is renamed aside before anything is saved,
+///   so the first keystroke can't wipe it; if it can't be renamed, scratch isn't saved at all
+///   until the next launch.
 ///
 /// It does not own recent files or the last-opened file; the app wires those to `Settings`.
 @MainActor public final class NotesStore {
@@ -47,13 +57,18 @@ public enum NotesSource: Equatable, Sendable {
     private let saveDelay: Duration
     /// The latest scratch text. Kept separately so an open file's text never replaces it.
     private var scratchText: String
-    /// The text waiting for its debounce to end, and where it must be written.
+    /// True when an unreadable scratch file couldn't be moved aside: saving would destroy it.
+    private var scratchSavesDisabled = false
+    /// The text not yet written (waiting for the debounce, failed, or held), and where it
+    /// must be written.
     private var pending: (target: NotesSource, text: String)?
     private var pendingTask: Task<Void, Never>?
     private var watcher: FileWatcher?
     /// The open file's bytes as we last wrote or read them. A watcher event that finds
     /// exactly these bytes is our own save (or a repeat event) and is ignored.
     private var knownFileBytes: Data?
+    /// True while the open file holds content we couldn't read; edits to it are held.
+    private var fileSavesSuspended = false
 
     /// Loads scratch notes from `scratchURL` (empty if the file doesn't exist yet).
     ///
@@ -69,7 +84,8 @@ public enum NotesSource: Equatable, Sendable {
             scratchText = ""
         case .failure(let failure):
             scratchText = ""
-            lastError = Self.message("Couldn't load", scratchURL, failure)
+            (lastError, scratchSavesDisabled) = Self.moveUnreadableScratchAside(
+                scratchURL, failure)
         }
         text = scratchText
     }
@@ -88,12 +104,14 @@ public enum NotesSource: Equatable, Sendable {
         }
         switch Self.read(url) {
         case .success(let loaded):
+            let dropped = dropUnsavedEdits()
             watcher?.stop()
             watcher = newWatcher
             source = .file(url)
             text = loaded.text
             knownFileBytes = loaded.data
-            lastError = nil
+            fileSavesSuspended = false
+            lastError = dropped
         case .failure(let failure):
             newWatcher.stop()
             lastError = Self.message("Couldn't open", url, failure)
@@ -101,9 +119,12 @@ public enum NotesSource: Equatable, Sendable {
     }
 
     /// Stops using the open file and returns to scratch notes, as they were last saved.
-    /// Any pending edit to the file is saved first.
+    /// Any pending edit to the file is saved first (or reported if it can't be).
     public func closeFile() {
         savePendingNow()
+        if case .file = source, let dropped = dropUnsavedEdits() {
+            lastError = dropped
+        }
         switchToScratch()
     }
 
@@ -116,42 +137,45 @@ public enum NotesSource: Equatable, Sendable {
         pending = (source, newText)
         pendingTask?.cancel()
         pendingTask = Task { [weak self, saveDelay] in
-            do {
-                try await Task.sleep(for: saveDelay)
-            } catch {
-                return  // Superseded by a newer edit, a flush, or an external change.
-            }
+            try? await Task.sleep(for: saveDelay)
+            // Superseded by a newer edit, a flush, or an external change.
+            guard !Task.isCancelled else { return }
             self?.savePendingNow()
         }
     }
 
-    /// Writes any pending save immediately. Called on quit, so the last keystrokes are
-    /// not lost to the debounce, and by tests.
+    /// Writes any pending save immediately (retrying one that failed). Called on quit, so
+    /// the last keystrokes are not lost to the debounce, and by tests.
     public func flush() async {
         savePendingNow()
     }
 
     // MARK: - Saving
 
+    /// Writes `pending` if its destination may be written; otherwise, or on failure, keeps
+    /// it so a later flush or source switch can retry.
     private func savePendingNow() {
         pendingTask?.cancel()
         pendingTask = nil
         guard let save = pending else { return }
-        pending = nil
         let data = Data(save.text.utf8)
         switch save.target {
         case .scratch:
+            guard !scratchSavesDisabled else { return }
             do {
                 try FileManager.default.createDirectory(
                     at: scratchURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try data.write(to: scratchURL, options: .atomic)
+                pending = nil
             } catch {
                 lastError = "Couldn't save “\(scratchURL.lastPathComponent)”."
             }
         case .file(let url):
+            guard !fileSavesSuspended else { return }
             do {
                 try data.write(to: url, options: .atomic)
                 knownFileBytes = data
+                pending = nil
             } catch {
                 lastError = "Couldn't save “\(url.lastPathComponent)”."
             }
@@ -165,12 +189,47 @@ public enum NotesSource: Equatable, Sendable {
         pending = nil
     }
 
+    /// Called when leaving a source after trying to save: drops what couldn't be written
+    /// and returns a message saying so, or nil if nothing was lost.
+    private func dropUnsavedEdits() -> String? {
+        guard let save = pending else { return nil }
+        cancelPendingSave()
+        let name =
+            switch save.target {
+            case .scratch: scratchURL.lastPathComponent
+            case .file(let url): url.lastPathComponent
+            }
+        return "Changes to “\(name)” couldn't be saved and were discarded."
+    }
+
     private func switchToScratch() {
         watcher?.stop()
         watcher = nil
         knownFileBytes = nil
+        fileSavesSuspended = false
         source = .scratch
         text = scratchText
+    }
+
+    /// Renames an unreadable scratch file to `<name>.unreadable-<yyyyMMdd-HHmmss>` so the
+    /// first save can't destroy it. Returns the message for `lastError`, and whether scratch
+    /// saving must be disabled for this run because the rename failed.
+    private static func moveUnreadableScratchAside(
+        _ scratchURL: URL, _ failure: ReadFailure
+    ) -> (message: String, disableSaves: Bool) {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let asideName = "\(scratchURL.lastPathComponent).unreadable-\(formatter.string(from: .now))"
+        let problem = Self.message("Couldn't load", scratchURL, failure)
+        do {
+            try FileManager.default.moveItem(
+                at: scratchURL,
+                to: scratchURL.deletingLastPathComponent().appending(path: asideName))
+            return ("\(problem) It was kept as “\(asideName)”.", false)
+        } catch {
+            return ("\(problem) Scratch notes won't be saved until you relaunch.", true)
+        }
     }
 
     // MARK: - Reloading
@@ -181,21 +240,35 @@ public enum NotesSource: Equatable, Sendable {
     /// watcher first, and `FileWatcher.stop()` guarantees no callback after it returns.
     private func fileDidChange(_ url: URL) {
         switch Self.read(url) {
+        case .success(let loaded) where loaded.data == knownFileBytes:
+            // Our own save, a repeat event, or a revert after a failed reload.
+            if fileSavesSuspended {
+                fileSavesSuspended = false
+                lastError = nil
+                savePendingNow()  // The file is as we left it, so held edits are safe to write.
+            }
+            return
         case .success(let loaded):
-            guard loaded.data != knownFileBytes else { return }  // Our save, or a repeat.
             cancelPendingSave()  // The external change wins; see the type's doc comment.
             text = loaded.text
             knownFileBytes = loaded.data
+            fileSavesSuspended = false
             lastError = nil
         case .failure(.missing):
             // The watcher gave up waiting for it: the file is gone for good. Drop the
             // pending save so the file is never recreated, and show scratch instead.
+            let discarded = pending == nil ? "" : " Unsaved changes to it were discarded."
             cancelPendingSave()
             switchToScratch()
-            lastError = "“\(url.lastPathComponent)” was moved or deleted; showing scratch notes."
+            lastError =
+                "“\(url.lastPathComponent)” was moved or deleted; showing scratch notes.\(discarded)"
         case .failure(let failure):
-            // Possibly a transient state of another editor's save: keep what we have.
-            lastError = Self.message("Couldn't reload", url, failure)
+            // We can't see what another program put there, so we must not overwrite it.
+            fileSavesSuspended = true
+            pendingTask?.cancel()
+            pendingTask = nil
+            lastError =
+                "\(Self.message("Couldn't reload", url, failure)) Edits are not being saved to it."
             return
         }
         onExternalChange?()
