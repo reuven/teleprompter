@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var modeState = ModeState.initial(hasNotes: true)
     private var panel: NotesPanel?
     private var statusMenu: StatusMenu?
+    // The recordable positive control; non-nil only while Show in Recordings (Test) is on.
+    private var testWindow: CaptureTestWindow?
 
     /// Builds the panel and menu once AppKit is ready, places the panel, and shows it without
     /// activating the app, so launching never steals focus from the app being recorded.
@@ -34,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.onQuit = { NSApplication.shared.terminate(nil) }
         menu.update(from: modeState)
         statusMenu = menu
+        checkPanelHidden()
     }
 
     /// Remembers the new position so the panel reopens where the user left it.
@@ -52,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func toggleMode() {
         modeState.toggleMode()
         syncToState()
+        checkPanelHidden()
     }
 
     private func toggleCaptureVisible() {
@@ -62,6 +66,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func syncToState() {
         panel?.apply(modeState)
         statusMenu?.update(from: modeState)
+        syncTestWindow()
+    }
+
+    // A fresh window every time the test turns on, closed and released when it turns off, so a
+    // recordable window is never reused or left on screen.
+    private func syncTestWindow() {
+        if modeState.captureVisible, testWindow == nil, let panel {
+            let window = CaptureTestWindow(below: panel.frame)
+            window.orderFrontRegardless()
+            testWindow = window
+        } else if !modeState.captureVisible {
+            testWindow?.close()
+            testWindow = nil
+        }
+    }
+
+    // Asks the window server, not AppKit, whether the notes are hidden. A warning sticks until
+    // relaunch: once the panel has been seen as recordable, it isn't trusted again.
+    private func checkPanelHidden() {
+        guard let panel else { return }
+        let state = windowServerSharingState(windowNumber: panel.windowNumber)
+        if let warning = captureWarning(sharingState: state) {
+            statusMenu?.showWarning(warning)
+        }
     }
 
     /// The saved frame if it still lands on a connected display, else the default under the

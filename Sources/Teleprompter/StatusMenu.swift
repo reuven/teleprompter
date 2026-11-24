@@ -16,6 +16,7 @@ final class StatusMenu: NSObject {
     var onQuit: () -> Void = {}
 
     private let statusItem: NSStatusItem
+    private let warningItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let modeItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let captureItem = NSMenuItem(
         title: "Show in Recordings (Test)", action: nil, keyEquivalent: "")
@@ -41,14 +42,25 @@ final class StatusMenu: NSObject {
         setCaptureVisible(state.captureVisible)
     }
 
-    /// Shows a checkmark next to Show in Recordings while the panel is visible to capture, so the
-    /// menu always tells the truth about whether the notes can be recorded.
+    /// Puts `text` at the top of the menu (disabled) and tints the menu-bar icon red, so a failed
+    /// hiding check is visible without opening anything.
+    func showWarning(_ text: String) {
+        warningItem.title = text
+        warningItem.isHidden = false
+        statusItem.button?.contentTintColor = .systemRed
+    }
+
+    /// Shows a checkmark next to Show in Recordings while the red test window is up, so the menu
+    /// always tells the truth about whether a recordable window is on screen.
     func setCaptureVisible(_ on: Bool) {
         captureItem.state = on ? .on : .off
     }
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
+        warningItem.isEnabled = false
+        warningItem.isHidden = true
+        menu.addItem(warningItem)
         modeItem.title = Self.modeTitle(for: .recording)
         modeItem.action = #selector(toggleMode)
         modeItem.target = self

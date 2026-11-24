@@ -7,20 +7,23 @@ import TeleprompterCore
 /// absent from ScreenFlow, never stealing focus from the app being recorded, and following the user
 /// across Spaces and full-screen apps. Every one of those properties is fixed here, in one place,
 /// so the tests can pin them without a visible window.
+///
+/// `sharingType` is set to `.none` once, in `init`, and never written again. On macOS 26.5 a
+/// LaunchServices-launched app that sets a window back to `.none` after making it recordable is
+/// silently ignored (the window stays recordable while AppKit's getter still says `.none`), so the
+/// capture test uses a separate `CaptureTestWindow` instead of toggling this one.
 final class NotesPanel: NSPanel {
     /// The text shown until notes files arrive (Task 7); it tells the user how to check hiding.
     static let sampleText = """
         Teleprompter — sample notes
         • This window should NOT appear in your recording
-        • Menu-bar icon › Show in Recordings (Test) makes it visible
+        • Menu-bar icon › Show in Recordings (Test) shows a red copy that SHOULD appear
         """
 
     /// Corner radius of the dark background, in points.
     static let cornerRadius: CGFloat = 16
     /// Gap between the background edge and the text, in points.
     static let padding: CGFloat = 20
-    /// Width of the red "visible to recording" border, in points.
-    static let captureBorderWidth: CGFloat = 4
 
     /// Edit takes clicks and focus; recording lets every click pass through to the app beneath,
     /// so reading notes can never disturb the app being recorded.
@@ -31,13 +34,10 @@ final class NotesPanel: NSPanel {
     /// The background's opacity, taken from settings; exposed so tests can check it.
     private(set) var backgroundAlpha: Double
 
-    /// The rounded dark view behind the text; it also carries the capture-check border.
-    let backgroundView = NSView()
+    /// The rounded dark view behind the text.
+    let backgroundView: NSView
     /// The notes text.
     let textLabel: NSTextField
-    /// Shown only while the window is deliberately visible to capture, so a test recording can't
-    /// be confused with a real one.
-    let captureLabel = NSTextField(labelWithString: "VISIBLE TO RECORDING")
 
     /// Builds the panel with the exact window configuration the hiding depends on.
     ///
@@ -45,7 +45,7 @@ final class NotesPanel: NSPanel {
     /// stays free of screen lookups and can be built in tests.
     init(settings: Settings) {
         backgroundAlpha = settings.opacity
-        textLabel = NSTextField(wrappingLabelWithString: Self.sampleText)
+        (backgroundView, textLabel) = Self.makeContent(text: Self.sampleText, settings: settings)
         super.init(
             contentRect: CGRect(origin: .zero, size: Placement.defaultSize),
             styleMask: [.borderless, .nonactivatingPanel, .resizable],
@@ -61,7 +61,7 @@ final class NotesPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = false
         ignoresMouseEvents = (mode == .recording)
-        buildContent(fontSize: settings.fontSize)
+        contentView = backgroundView
     }
 
     /// Only edit mode may take keyboard focus; borderless panels refuse it by default.
@@ -70,25 +70,15 @@ final class NotesPanel: NSPanel {
     /// Never main: the panel is an accessory and must not demote the app being recorded.
     override var canBecomeMain: Bool { false }
 
-    /// Turns the "check capture" opt-in on or off: makes the window recordable and marks it with a
-    /// red border and label so it is unmistakable on screen and in the recording.
-    func setCaptureVisible(_ on: Bool) {
-        sharingType = on ? .readOnly : .none
-        backgroundView.layer?.borderWidth = on ? Self.captureBorderWidth : 0
-        captureLabel.isHidden = !on
-    }
-
-    /// Brings the panel in line with `state`, the single source of truth for mode and capture.
+    /// Brings the panel in line with `state`'s mode, moving focus with it.
     ///
-    /// Why one entry point: a mode change must also clear the capture check and move focus, and
-    /// doing all three together means no caller can leave the panel half-switched (for example,
-    /// recordable after locking for recording). Entering edit takes key focus so typing reaches
-    /// the panel; leaving it drops first responder and key status so keystrokes return to the
-    /// app being recorded.
+    /// Why one entry point: a mode change must also move focus, and doing both together means no
+    /// caller can leave the panel half-switched. Entering edit takes key focus so typing reaches
+    /// the panel; leaving it drops first responder and key status so keystrokes return to the app
+    /// being recorded. Capture visibility is deliberately not applied here (see the type docs).
     func apply(_ state: ModeState) {
         let entering = state.mode != mode
         mode = state.mode
-        setCaptureVisible(state.captureVisible)
         guard entering else { return }
         if mode == .edit {
             makeKey()
@@ -98,37 +88,28 @@ final class NotesPanel: NSPanel {
         }
     }
 
-    private func buildContent(fontSize: Double) {
-        backgroundView.wantsLayer = true
-        let layer = backgroundView.layer
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(backgroundAlpha).cgColor
-        layer?.cornerRadius = Self.cornerRadius
+    /// Builds the rounded dark background with `text` inset by `padding`.
+    ///
+    /// Shared with `CaptureTestWindow` so the positive control is styled like the notes; callers
+    /// choose the text, which is how the test window is kept from ever showing the notes.
+    static func makeContent(text: String, settings: Settings) -> (NSView, NSTextField) {
+        let background = NSView()
+        background.wantsLayer = true
+        let layer = background.layer
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(settings.opacity).cgColor
+        layer?.cornerRadius = cornerRadius
         layer?.masksToBounds = true
-        layer?.borderColor = NSColor.systemRed.cgColor
-        layer?.borderWidth = 0
-        contentView = backgroundView
 
-        textLabel.textColor = .white
-        textLabel.font = .systemFont(ofSize: fontSize)
-        captureLabel.textColor = .systemRed
-        captureLabel.font = .boldSystemFont(ofSize: 12)
-        captureLabel.isHidden = true
-
-        for view in [textLabel, captureLabel] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            backgroundView.addSubview(view)
-        }
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.textColor = .white
+        label.font = .systemFont(ofSize: settings.fontSize)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(label)
         NSLayoutConstraint.activate([
-            textLabel.leadingAnchor.constraint(
-                equalTo: backgroundView.leadingAnchor, constant: Self.padding),
-            textLabel.trailingAnchor.constraint(
-                equalTo: backgroundView.trailingAnchor, constant: -Self.padding),
-            textLabel.topAnchor.constraint(
-                equalTo: backgroundView.topAnchor, constant: Self.padding),
-            captureLabel.trailingAnchor.constraint(
-                equalTo: backgroundView.trailingAnchor, constant: -Self.padding),
-            captureLabel.bottomAnchor.constraint(
-                equalTo: backgroundView.bottomAnchor, constant: -Self.padding / 2),
+            label.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: padding),
+            label.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -padding),
+            label.topAnchor.constraint(equalTo: background.topAnchor, constant: padding),
         ])
+        return (background, label)
     }
 }

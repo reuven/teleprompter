@@ -23,14 +23,6 @@ import Testing
     #expect(!p.ignoresMouseEvents && p.canBecomeKey)
 }
 
-@MainActor @Test func captureCheckTogglesSharing() {
-    let p = NotesPanel(settings: Settings())
-    p.setCaptureVisible(true)
-    #expect(p.sharingType == .readOnly)
-    p.setCaptureVisible(false)
-    #expect(p.sharingType == .none)
-}
-
 @MainActor @Test func panelIsNonActivatingAndOnAllSpaces() {
     let p = NotesPanel(settings: Settings())
     #expect(p.styleMask.contains(.nonactivatingPanel))
@@ -41,15 +33,6 @@ import Testing
 
 @MainActor @Test func opacityFromSettings() {
     #expect(NotesPanel(settings: Settings(opacity: 0.5)).backgroundAlpha == 0.5)
-}
-
-@MainActor @Test func captureCheckShowsRedBorderAndLabel() {
-    let p = NotesPanel(settings: Settings())
-    #expect(p.captureLabel.isHidden && p.backgroundView.layer?.borderWidth == 0)
-    p.setCaptureVisible(true)
-    #expect(!p.captureLabel.isHidden && p.backgroundView.layer?.borderWidth == 4)
-    p.setCaptureVisible(false)
-    #expect(p.captureLabel.isHidden && p.backgroundView.layer?.borderWidth == 0)
 }
 
 @MainActor @Test func panelFloatsAndStaysPut() {
@@ -65,18 +48,6 @@ import Testing
     #expect(p.textLabel.font?.pointSize == 40 && p.textLabel.textColor == .white)
 }
 
-@MainActor @Test func applyingEditStateAcceptsInputAndHidesFromCapture() {
-    let p = NotesPanel(settings: Settings())
-    var state = ModeState.initial(hasNotes: true)
-    state.setCaptureVisible(true)
-    p.apply(state)
-    #expect(p.sharingType == .readOnly)
-    state.toggleMode()
-    p.apply(state)
-    #expect(p.mode == .edit && !p.ignoresMouseEvents && p.canBecomeKey)
-    #expect(p.sharingType == .none && p.captureLabel.isHidden)
-}
-
 @MainActor @Test func applyingRecordingStateDropsFocusAndClicks() {
     let p = NotesPanel(settings: Settings())
     var state = ModeState.initial(hasNotes: false)
@@ -90,4 +61,27 @@ import Testing
 @MainActor @Test func modeMenuTitleOffersTheOtherMode() {
     #expect(StatusMenu.modeTitle(for: .recording) == "Edit Notes")
     #expect(StatusMenu.modeTitle(for: .edit) == "Lock for Recording")
+}
+
+@MainActor @Test func applyingEditStateAcceptsInput() {
+    let p = NotesPanel(settings: Settings())
+    var state = ModeState.initial(hasNotes: true)
+    p.apply(state)
+    #expect(p.mode == .recording && p.ignoresMouseEvents)
+    state.toggleMode()
+    p.apply(state)
+    #expect(p.mode == .edit && !p.ignoresMouseEvents && p.canBecomeKey)
+}
+
+@MainActor @Test func panelStaysHiddenThroughModeSwitches() {
+    let p = NotesPanel(settings: Settings())
+    var state = ModeState.initial(hasNotes: true)
+    for _ in 0..<4 {
+        state.setCaptureVisible(true)
+        p.apply(state)
+        #expect(p.sharingType == .none)
+        state.toggleMode()
+        p.apply(state)
+        #expect(p.sharingType == .none)
+    }
 }

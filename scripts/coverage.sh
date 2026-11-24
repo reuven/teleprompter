@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Fails unless every file under Sources/TeleprompterCore/, and Sources/Teleprompter/NotesPanel.swift
-# (the window whose configuration keeps notes out of recordings), has 100% line coverage.
+# Fails unless every file under Sources/TeleprompterCore/, plus the app files that decide whether
+# notes stay out of recordings (NotesPanel.swift, CaptureTestWindow.swift, CaptureCheck.swift),
+# has 100% line coverage.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,3 +33,5 @@ check() {
 
 check TeleprompterCore "$(gate /Sources/TeleprompterCore/)"
 check NotesPanel.swift "$(gate /Sources/Teleprompter/NotesPanel.swift)"
+check CaptureTestWindow.swift "$(gate /Sources/Teleprompter/CaptureTestWindow.swift)"
+check CaptureCheck.swift "$(gate /Sources/Teleprompter/CaptureCheck.swift)"
