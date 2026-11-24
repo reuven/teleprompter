@@ -5,17 +5,27 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-swift build -c release
-bin="$(swift build -c release --show-bin-path)/Teleprompter"
+# Universal binary (Apple silicon + Intel); with more than one --arch SwiftPM builds through
+# xcbuild, so the products path comes from --show-bin-path with the same flags.
+archs=(--arch arm64 --arch x86_64)
+swift build -c release "${archs[@]}"
+bin="$(swift build -c release "${archs[@]}" --show-bin-path)/Teleprompter"
 
-version="$(git describe --tags --always)"
+# CFBundleShortVersionString: the tag without its "v" and without any -N-gSHA suffix
+# (v0.1.0-3-gabc123 -> 0.1.0); "0.1.0" when there is no tag. CFBundleVersion must be numeric:
+# the commit count.
+described="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+version="${described#v}"
+version="${version:-0.1.0}"
+build="$(git rev-list --count HEAD)"
 app="build/Teleprompter.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS"
 cp "$bin" "$app/Contents/MacOS/Teleprompter"
 cp scripts/Info.plist "$app/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
-plutil -replace CFBundleVersion -string "$version" "$app/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$build" "$app/Contents/Info.plist"
 
 codesign --force --sign - "$app"
-echo "Built $app ($version)"
+codesign --verify --deep --strict "$app"
+echo "Built $app ($version, build $build)"
