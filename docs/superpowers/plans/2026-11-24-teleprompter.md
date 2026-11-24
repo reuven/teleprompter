@@ -546,15 +546,15 @@ Run `testslot -- swift test --filter NotesPanelTests`. Expected: FAIL (`NotesPan
   - Settings are saved on every change.
   - On quit, `await store.flush()` before terminating (`applicationShouldTerminate` → `.terminateLater`).
 
-- [ ] **Step 1:** Create a branch: `feat/menus`.
-- [ ] **Step 2:** Implement the behavior above.
+- [x] **Step 1:** Create a branch: `feat/menus`.
+- [x] **Step 2:** Implement the behavior above.
 - [ ] **Step 3:** Build and run. Manually check:
   1. Open a `.md` file, edit it in BBEdit or VS Code, and save. Expected: the panel updates.
   2. Edit in the panel. Expected: the file changes on disk.
   3. Delete the file. Expected: the error appears in the menu and the app falls back to scratch.
   4. Quit and relaunch. Expected: the same file, size, opacity, and position come back.
   5. Unplug the external display, if available. Expected: the panel comes back at the default position.
-- [ ] **Step 4:** Run coverage and lint. Commit ("Wire file menu, appearance, persistence"), push, merge, delete the branch.
+- [x] **Step 4:** Run coverage and lint. Commit ("Wire file menu, appearance, persistence"), push, merge, delete the branch.
 
 ---
 
