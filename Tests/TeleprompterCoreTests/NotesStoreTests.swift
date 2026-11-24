@@ -627,6 +627,77 @@ private func contents(_ url: URL) throws -> String {
         #expect(!NotesStore.isOpenableFile(file), "unreadable")
     }
 
+    @Test func keptScratchNoticeComesBackWhenAFileErrorClears() async throws {
+        let unlockScratch = try lockScratchFolder()
+        defer { try? unlockScratch() }
+        let store = makeStore(saveDelay: .milliseconds(10))
+        store.userEdited("scratch typing")
+        let locked = try openLockedFile(store)
+        store.userEdited("new")  // The debounced save fails (only the file is tried).
+        #expect(await waitUntil { store.lastError?.contains("locked.md") == true })
+        try unlock(locked)
+        store.userEdited("newer")
+        #expect(await waitUntil { (try? contents(locked.file)) == "newer" })
+        #expect(store.lastError?.contains("scratch notes") == true, "still unsaved, still said")
+    }
+
+    @Test func unsavedReasonIsOnlyASaveProblem() async throws {
+        let store = makeStore(saveDelay: .seconds(30))
+        #expect(store.unsavedChangesReason == nil)
+        let locked = try openLockedFile(store)
+        defer { try? unlock(locked) }
+        store.userEdited("new")
+        await store.flush()
+        let reason = try #require(store.unsavedChangesReason)
+        #expect(reason.contains("locked.md"))
+        store.open(dir.appendingPathComponent("nowhere.md"))  // An unrelated error replaces it.
+        #expect(store.hasUnsavedChanges && store.lastError?.contains("nowhere.md") == true)
+        #expect(store.unsavedChangesReason == nil)
+    }
+
+    @Test func unsavedReasonCoversSuspendedAndKeptScratch() async throws {
+        let unlockScratch = try lockScratchFolder()
+        defer { try? unlockScratch() }
+        let store = makeStore(saveDelay: .seconds(30))
+        store.userEdited("scratch typing")
+        let file = try makeFile("hello")
+        store.open(file)
+        #expect(store.unsavedChangesReason?.contains("scratch notes") == true)
+        try atomicReplace(file, with: Data([0xFF, 0xFE, 0x00]))
+        #expect(await waitUntil { store.lastError?.contains("not being saved") == true })
+        #expect(store.unsavedChangesReason?.contains("not being saved") == true)
+    }
+
+    @Test func oversizeReloadIsNotLoadedAndHoldsSaves() async throws {
+        let store = makeStore()
+        let file = try makeFile("hello")
+        store.open(file)
+        let big = Data(repeating: 0x61, count: NotesStore.maxFileSize + 1)
+        try atomicReplace(file, with: big)
+        #expect(await waitUntil { store.lastError != nil })
+        let error = try #require(store.lastError)
+        #expect(
+            error.contains("talk.md") && error.contains("2 MB") && error.contains("not being saved")
+        )
+        #expect(store.text == "hello" && store.source == .file(file))
+        store.userEdited("typed")
+        await store.flush()
+        #expect(try Data(contentsOf: file) == big, "never overwritten")
+    }
+
+    @Test func scratchFileIsRecognizedWhateverTheCase() async throws {
+        let store = makeStore()
+        // Before the scratch file exists: compared by path, ignoring case.
+        store.open(dir.appendingPathComponent("SUPPORT/Scratch.MD"))
+        #expect(store.lastError?.contains("scratch notes") == true)
+        store.userEdited("scratch")
+        await store.flush()
+        // Once it exists: compared as the same file on disk.
+        store.dismissError()
+        store.open(dir.appendingPathComponent("Support/SCRATCH.md"))
+        #expect(store.source == .scratch && store.lastError?.contains("scratch notes") == true)
+    }
+
     @Test func blockedScratchSaveIsRaisedAgainAfterDismissal() async throws {
         let blocker = try makeFile("x", name: "blocker")
         let store = NotesStore(

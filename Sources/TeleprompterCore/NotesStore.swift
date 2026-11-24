@@ -72,6 +72,17 @@ public enum NotesSource: Equatable, Sendable {
     /// so notes are never lost silently.
     public var hasUnsavedChanges: Bool { pending != nil || scratchUnsaved }
 
+    /// The message to show when quitting with unsaved changes: `lastError` if it describes why
+    /// something isn't saved (a failed save, held saves, kept scratch edits, blocked scratch
+    /// saving), else nil, so an unrelated error ("Couldn't open …") is never shown as the reason.
+    public var unsavedChangesReason: String? {
+        guard hasUnsavedChanges, let lastError else { return nil }
+        let reasons = [
+            fileFailureMessage, fileSavesSuspended ? suspendedMessage : nil, scratchFailureMessage,
+        ]
+        return reasons.contains(lastError) ? lastError : nil
+    }
+
     /// The largest file `open` accepts, in bytes (2 MB). Notes are a page or two; anything
     /// bigger is almost certainly the wrong file, and fitting it would stall the reader.
     public static let maxFileSize = 2 * 1024 * 1024
@@ -142,15 +153,9 @@ public enum NotesSource: Equatable, Sendable {
     /// Also refused, with a message: the scratch file itself (by any path or symlink), which
     /// would make one file two sources, and files over `maxFileSize`.
     public func open(_ url: URL) {
-        if Self.resolved(url) == Self.resolved(scratchURL) {
+        if Self.isSameFile(url, scratchURL) {
             lastError =
                 "“\(url.lastPathComponent)” holds the scratch notes; they're shown whenever no file is open."
-            return
-        }
-        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-            size > Self.maxFileSize
-        {
-            lastError = "Couldn't open “\(url.lastPathComponent)”: it's larger than 2 MB."
             return
         }
         savePendingNow()
@@ -159,7 +164,7 @@ public enum NotesSource: Equatable, Sendable {
         let newWatcher = FileWatcher(url: url, queue: .main) { [weak self] in
             MainActor.assumeIsolated { self?.fileDidChange(url) }
         }
-        switch Self.read(url) {
+        switch Self.read(url, maxSize: Self.maxFileSize) {
         case .success(let loaded):
             let dropped = dropUnsavedEdits()
             watcher?.stop()
@@ -264,7 +269,10 @@ public enum NotesSource: Equatable, Sendable {
             clearIfStale(&scratchFailureMessage)
             return true
         } catch {
-            scratchFailureMessage = "Couldn't save “\(scratchURL.lastPathComponent)”."
+            // Kept scratch edits keep their fuller "kept" notice through a failed retry.
+            if !scratchUnsaved || scratchFailureMessage == nil {
+                scratchFailureMessage = "Couldn't save “\(scratchURL.lastPathComponent)”."
+            }
             lastError = scratchFailureMessage
             return false
         }
@@ -272,8 +280,13 @@ public enum NotesSource: Equatable, Sendable {
 
     /// A save to one target worked, so that target's own failure message is out of date. Clears
     /// `lastError` only if it still shows that message: another target's problem stays up.
+    ///
+    /// Kept scratch edits are still unsaved after another target's success, so their notice
+    /// comes back rather than going silent.
     private func clearIfStale(_ message: inout String?) {
-        if let stale = message, lastError == stale { lastError = nil }
+        if let stale = message, lastError == stale {
+            lastError = scratchUnsaved ? scratchFailureMessage : nil
+        }
         message = nil
     }
 
@@ -354,7 +367,8 @@ public enum NotesSource: Equatable, Sendable {
     /// `url` is always the open file: every path that changes `source` stops the old
     /// watcher first, and `FileWatcher.stop()` guarantees no callback after it returns.
     private func fileDidChange(_ url: URL) {
-        switch Self.read(url) {
+        // Over the size limit counts as unreadable: not loaded, and saves are held.
+        switch Self.read(url, maxSize: Self.maxFileSize) {
         case .success(let loaded) where loaded.data == knownFileBytes:
             // Our own save, a repeat event, or a revert after a failed reload.
             if fileSavesSuspended {
@@ -392,16 +406,39 @@ public enum NotesSource: Equatable, Sendable {
 
     // MARK: - Reading
 
-    /// `url` with `.`/`..` removed and symlinks resolved, so two paths to one file compare equal.
+    /// Whether `a` and `b` name the same file: by file identity when both exist (catching any
+    /// spelling, case, or link), else by resolved path, ignoring case as macOS volumes usually
+    /// do.
+    ///
+    /// Symlinks are resolved first: a link's own resource values describe the link, not the file.
+    private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+        let (a, b) = (resolved(a), resolved(b))
+        let key: Set<URLResourceKey> = [.fileResourceIdentifierKey]
+        if let idA = try? a.resourceValues(forKeys: key).fileResourceIdentifier,
+            let idB = try? b.resourceValues(forKeys: key).fileResourceIdentifier
+        {
+            return idA.isEqual(idB)
+        }
+        return a.path.lowercased() == b.path.lowercased()
+    }
+
     private static func resolved(_ url: URL) -> URL {
         url.standardizedFileURL.resolvingSymlinksInPath()
     }
 
     private enum ReadFailure: Error {
-        case missing, notUTF8, unreadable
+        case missing, notUTF8, unreadable, tooLarge
     }
 
-    private static func read(_ url: URL) -> Result<(data: Data, text: String), ReadFailure> {
+    /// Reads `url` as UTF-8 text. With `maxSize`, a larger file is refused before reading it.
+    private static func read(_ url: URL, maxSize: Int? = nil) -> Result<
+        (data: Data, text: String), ReadFailure
+    > {
+        if let maxSize, let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+            size > maxSize
+        {
+            return .failure(.tooLarge)
+        }
         let data: Data
         do {
             data = try Data(contentsOf: url)
@@ -423,6 +460,7 @@ public enum NotesSource: Equatable, Sendable {
             case .missing: "the file doesn't exist"
             case .notUTF8: "it isn't UTF-8 text"
             case .unreadable: "it can't be read"
+            case .tooLarge: "it's larger than 2 MB"
             }
         return "\(action) “\(url.lastPathComponent)”: \(reason)."
     }
