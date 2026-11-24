@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         settings = settingsStore.load()
         let panel = NotesPanel(settings: settings)
-        panel.mode = modeState.mode
+        panel.apply(modeState)
         panel.setFrame(launchFrame(), display: false)
         // Set after placement so the launch position isn't saved as if the user had moved it.
         panel.delegate = self
@@ -29,8 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.panel = panel
 
         let menu = StatusMenu()
+        menu.onToggleMode = { [weak self] in self?.toggleMode() }
         menu.onToggleCaptureVisible = { [weak self] in self?.toggleCaptureVisible() }
         menu.onQuit = { NSApplication.shared.terminate(nil) }
+        menu.update(from: modeState)
         statusMenu = menu
     }
 
@@ -46,10 +48,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         settingsStore.save(settings)
     }
 
+    // ModeState decides (toggling mode also clears the capture check); panel and menu follow.
+    private func toggleMode() {
+        modeState.toggleMode()
+        syncToState()
+    }
+
     private func toggleCaptureVisible() {
         modeState.setCaptureVisible(!modeState.captureVisible)
-        panel?.setCaptureVisible(modeState.captureVisible)
-        statusMenu?.setCaptureVisible(modeState.captureVisible)
+        syncToState()
+    }
+
+    private func syncToState() {
+        panel?.apply(modeState)
+        statusMenu?.update(from: modeState)
     }
 
     /// The saved frame if it still lands on a connected display, else the default under the

@@ -10,10 +10,13 @@ import TeleprompterCore
 final class StatusMenu: NSObject {
     /// Called when the user picks Show in Recordings (Test).
     var onToggleCaptureVisible: () -> Void = {}
+    /// Called when the user picks Edit Notes / Lock for Recording.
+    var onToggleMode: () -> Void = {}
     /// Called when the user picks Quit.
     var onQuit: () -> Void = {}
 
     private let statusItem: NSStatusItem
+    private let modeItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let captureItem = NSMenuItem(
         title: "Show in Recordings (Test)", action: nil, keyEquivalent: "")
 
@@ -26,6 +29,18 @@ final class StatusMenu: NSObject {
         statusItem.menu = buildMenu()
     }
 
+    /// The mode item names the action it performs: the mode you'd switch to, not the current one.
+    static func modeTitle(for mode: Mode) -> String {
+        mode == .edit ? "Lock for Recording" : "Edit Notes"
+    }
+
+    /// Refreshes the mode item's title and the capture checkmark from `state`, so the menu always
+    /// matches the panel after any change.
+    func update(from state: ModeState) {
+        modeItem.title = Self.modeTitle(for: state.mode)
+        setCaptureVisible(state.captureVisible)
+    }
+
     /// Shows a checkmark next to Show in Recordings while the panel is visible to capture, so the
     /// menu always tells the truth about whether the notes can be recorded.
     func setCaptureVisible(_ on: Bool) {
@@ -34,8 +49,11 @@ final class StatusMenu: NSObject {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
+        modeItem.title = Self.modeTitle(for: .recording)
+        modeItem.action = #selector(toggleMode)
+        modeItem.target = self
+        menu.addItem(modeItem)
         // Placeholders until Tasks 7 and 10 wire them; nil actions render disabled.
-        menu.addItem(NSMenuItem(title: "Edit Notes", action: nil, keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Open…", action: nil, keyEquivalent: ""))
         let recent = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
@@ -63,6 +81,8 @@ final class StatusMenu: NSObject {
         menu.addItem(quit)
         return menu
     }
+
+    @objc private func toggleMode() { onToggleMode() }
 
     @objc private func toggleCaptureVisible() { onToggleCaptureVisible() }
 

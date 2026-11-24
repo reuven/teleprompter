@@ -78,6 +78,26 @@ final class NotesPanel: NSPanel {
         captureLabel.isHidden = !on
     }
 
+    /// Brings the panel in line with `state`, the single source of truth for mode and capture.
+    ///
+    /// Why one entry point: a mode change must also clear the capture check and move focus, and
+    /// doing all three together means no caller can leave the panel half-switched (for example,
+    /// recordable after locking for recording). Entering edit takes key focus so typing reaches
+    /// the panel; leaving it drops first responder and key status so keystrokes return to the
+    /// app being recorded.
+    func apply(_ state: ModeState) {
+        let entering = state.mode != mode
+        mode = state.mode
+        setCaptureVisible(state.captureVisible)
+        guard entering else { return }
+        if mode == .edit {
+            makeKey()
+        } else {
+            makeFirstResponder(nil)
+            resignKey()
+        }
+    }
+
     private func buildContent(fontSize: Double) {
         backgroundView.wantsLayer = true
         let layer = backgroundView.layer
