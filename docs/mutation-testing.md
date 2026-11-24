@@ -6,15 +6,17 @@ Tools: Muter 16 (`brew install muter-mutation-testing/formulae/muter`), Swift 6.
 
 ## Muter result
 
-**77% of 35 mutants killed. This is not a whole-library score.** It covers 6 of 7 Core files and 3 of 4 Muter operators (RelationalOperatorReplacement, RemoveSideEffects, ChangeLogicalConnector). It excludes `MarkdownRenderer.swift` (30 mutants; Muter crashes the unmutated baseline on it) and every SwapTernary mutant (Muter emits uncompilable code). The denominator shrank from 65 discovered mutants to 35 for that reason.
+**82% of 35 mutants killed (29/35), measured at commit 2b13419. This is not a whole-library score.** It covers 6 of 7 Core files and 3 of 4 Muter operators (RelationalOperatorReplacement, RemoveSideEffects, ChangeLogicalConnector). It excludes `MarkdownRenderer.swift` (30 mutants; Muter crashes the unmutated baseline on it) and every SwapTernary mutant (Muter emits uncompilable code). The denominator shrank from 65 discovered mutants to 35 for that reason.
 
-| | Mutants | Killed | Score |
+Every row below is a Muter measurement (`scripts/mutation.sh`), labeled with the commit it ran at.
+
+| Measured at | Mutants | Killed | Score |
 |---|---|---|---|
-| Before new tests | 35 | 26 | 74% |
-| After the first round of new tests | 35 | 27 | 77% |
-| After the fix-round tests (hand-checked, see below; Muter not re-run) | 35 | 29 expected | 83% expected |
+| 582e925 (main, before any new tests; Core unchanged since the run) | 35 | 26 | 74% |
+| e287a4c's tests (measured just before that commit) | 35 | 27 | 77% |
+| 2b13419 (current: timer tests added) | 35 | 29 | 82% |
 
-Muter counts a crash or compile failure of the mutated build as killed. The last row is arithmetic, not a measurement: the two extra tests were verified by hand-mutating the source (see "Survivors killed"). Re-run `scripts/mutation.sh` to get a measured number.
+The 6 survivors in the current run: NotesStore:206 (equivalent, see below), FileWatcher:117, and four mutants Muter never actually inserts (NotesStore:260, Placement:61 twice, TextFitter:51), which are checked by hand below. Muter counts a crash or compile failure of the mutated build as killed. The run took 11 min 4 s (timer tests now take longer).
 
 ## How to re-run
 
@@ -22,7 +24,7 @@ Muter counts a crash or compile failure of the mutated build as killed. The last
 scripts/mutation.sh
 ```
 
-It writes a gitignored `muter.conf.yml` for this checkout, runs Muter inside one test slot, and leaves the JSON report at `muter_logs/muter-report.json` (gitignored). It takes about 7.5 minutes. Do not run other `swift test` commands in this checkout meanwhile: Muter builds in this checkout's `.build`.
+It writes a gitignored `muter.conf.yml` for this checkout, runs Muter inside one test slot, and leaves the JSON report at `muter_logs/muter-report.json` (gitignored). It takes about 11 minutes. Do not run other `swift test` commands in this checkout meanwhile: Muter builds in this checkout's `.build`.
 
 ## What Muter could not do (exact failures, trimmed)
 
@@ -39,7 +41,7 @@ Each was verified by hand-mutating the source, running the named test through `t
 
 | Mutant | Killed by |
 |---|---|
-| NotesStore:138 `userEdited` drops `pendingTask?.cancel()` | `eachEditRestartsTheDebounce` (1 s delay, edits at 0 and 500 ms, check at 1.25 s) |
+| NotesStore:138 `userEdited` drops `pendingTask?.cancel()` | `eachEditRestartsTheDebounce` (2 s delay, edits at 0 and 1 s, check at 2.5 s) |
 | NotesStore:158 `savePendingNow` drops `pendingTask?.cancel()` | `flushCancelsTheTimerOfTheEditItSaved`: a stale timer saves the next edit early |
 | NotesStore:187 `cancelPendingSave` drops `pendingTask?.cancel()` | `externalChangeCancelsTheTimerOfTheEditItDropped`: same, after an external change |
 | TextFitter:51 `<=` to `<` | `heightExactlyEqualToBoxFits` |
