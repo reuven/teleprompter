@@ -44,10 +44,13 @@ ad hoc.
   every Space, above full-screen apps.
 - **Edit Notes** lets you type; **Lock for Recording** makes the panel click-through and
   stops it taking focus, so your typing and clicks go to the app underneath.
+- In edit mode, drag the panel by its edge margin (the dark border around the text).
 - **⌃⌥⌘N** (the physical N key, so it works with any input source) toggles between the two
   from any app. If another app owns that shortcut, the menu says "Shortcut ⌃⌥⌘N unavailable".
-- Notes are Markdown: headings, bold, italic, code, lists, quotes, and tables render in
-  recording mode.
+- Notes are Markdown. In recording mode, headings, lists (including nested and numbered),
+  bold, italic, and inline code render. Quotes, tables, links, and images show as plain text: a
+  quote's text without its marker, a table's cells separated by tabs, a link's text without its
+  address, an image's alt text. Code blocks show as plain text too.
 - The text shrinks to fit the panel (set the largest size with Larger/Smaller Text, or ⌘+ and
   ⌘− in the panel). When even the smallest size does not fit, a "▼ more below" badge shows.
 - Without a file open, notes are saved automatically to
@@ -55,6 +58,8 @@ ad hoc.
 - **Open…** (and Open Recent) shows a `.md`, `.markdown`, or `.txt` file instead. The app
   watches it: edits you make in the panel are saved back, and changes made in another editor
   appear live. Close File returns to your scratch notes.
+- Saving back to a file replaces it atomically, as most editors do, so Finder tags and other
+  extended attributes on that file aren't kept.
 - Position, size, font size, opacity, and the last file are remembered between launches.
 
 ## Is it really hidden? The capture test
@@ -67,6 +72,8 @@ capture. Whether a capture app honors that is up to the app.
   notes do not, hiding works.
 - The app also checks itself: if any of its windows is capturable, the menu shows
   "⚠ Notes may be visible to recordings — quit and relaunch".
+- The Open… dialog (including its file preview) and the menu-bar icon are not hidden; open
+  files before you start recording.
 
 **Re-check after every macOS or ScreenFlow update.** This works with ScreenFlow on macOS 26
 as tested, but it is empirical, not guaranteed. Apps built on ScreenCaptureKit have been
@@ -90,6 +97,10 @@ scripts/mutation.sh        # Muter mutation testing on TeleprompterCore (about 2
 swift format lint --strict -r Sources Tests
 ```
 
+- Tests that need a window server (a logged-in GUI session: windows, the capture checks, the
+  global shortcut, the notes view, the Open panel) carry the `.guiSession` Swift Testing tag.
+  They run by default, so run `swift test` in a GUI session; over SSH or on a headless CI
+  runner those tests fail. SwiftPM's `--filter`/`--skip` match names, not tags.
 - `scripts/coverage.sh` and `scripts/mutation.sh` run the tests through `testslot`, the
   author's local tool that limits how many test runs happen at once. If
   `~/.local/bin/testslot` is not installed they print a note and run directly, so you don't
