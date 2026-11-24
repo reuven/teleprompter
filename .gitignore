@@ -31,3 +31,5 @@ muter_logs/
 *~
 *.swp
 .DS_Store
+muter.conf.yml
+muter-report.json

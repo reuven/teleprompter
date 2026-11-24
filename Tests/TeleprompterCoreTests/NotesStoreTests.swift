@@ -219,18 +219,47 @@ private func contents(_ url: URL) throws -> String {
         #expect(try contents(file) == "new")
     }
 
+    // The three tests below pin that a superseded debounce timer is cancelled. A stale timer
+    // would write the newest text early, so each checks the file 250 ms after the stale timer
+    // would have fired (1 s) and 250 ms before the correct one does (1.5 s).
+
     @Test func eachEditRestartsTheDebounce() async throws {
         let file = try makeFile("old")
-        let store = makeStore(saveDelay: .milliseconds(400))
+        let store = makeStore(saveDelay: .seconds(1))
         store.open(file)
         store.userEdited("first")
-        try await Task.sleep(for: .milliseconds(200))
+        try await Task.sleep(for: .milliseconds(500))
         store.userEdited("second")
-        // 500 ms after the first edit but only 300 ms after the second: a first timer that
-        // was not cancelled would already have written.
-        try await Task.sleep(for: .milliseconds(300))
+        try await Task.sleep(for: .milliseconds(750))
         #expect(try contents(file) == "old", "the second edit restarts the delay")
         #expect(await waitUntil { (try? contents(file)) == "second" })
+    }
+
+    @Test func flushCancelsTheTimerOfTheEditItSaved() async throws {
+        let file = try makeFile("old")
+        let store = makeStore(saveDelay: .seconds(1))
+        store.open(file)
+        store.userEdited("first")
+        await store.flush()
+        try await Task.sleep(for: .milliseconds(500))
+        store.userEdited("second")
+        try await Task.sleep(for: .milliseconds(750))
+        #expect(try contents(file) == "first", "the flushed edit's timer must not save 'second'")
+        #expect(await waitUntil { (try? contents(file)) == "second" })
+    }
+
+    @Test func externalChangeCancelsTheTimerOfTheEditItDropped() async throws {
+        let file = try makeFile("old")
+        let store = makeStore(saveDelay: .seconds(1))
+        store.open(file)
+        store.userEdited("mine")
+        try atomicReplace(file, with: Data("ext".utf8))
+        #expect(await waitUntil { self.changes.count >= 1 })
+        try await Task.sleep(for: .milliseconds(500))
+        store.userEdited("mine again")
+        try await Task.sleep(for: .milliseconds(750))
+        #expect(try contents(file) == "ext", "the dropped edit's timer must not save 'mine again'")
+        #expect(await waitUntil { (try? contents(file)) == "mine again" })
     }
 
     @Test func flushWithNothingPendingWritesNothing() async {

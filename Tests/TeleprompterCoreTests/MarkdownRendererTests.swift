@@ -145,4 +145,48 @@ private func paragraphStyle(_ s: NSAttributedString, _ substring: String) -> NSP
         let two = paragraphStyle(b, "line two")
         #expect(two.firstLineHeadIndent == two.headIndent && two.headIndent > 0)
     }
+
+    // MARK: - Found by manual mutation testing (see docs/mutation-testing.md)
+
+    @Test func bodyTextAfterAHeadingIsPlain() {
+        let r = MarkdownRenderer.render("# Title\n\nbody text", style: style)
+        #expect(fontAt(r, "body").pointSize == 20)
+        #expect(!fontAt(r, "body").fontDescriptor.symbolicTraits.contains(.bold))
+    }
+
+    @Test func laterParagraphInAListItemIsIndentedWithTheItem() {
+        let r = MarkdownRenderer.render("- one\n\n  two", style: style)
+        #expect(paragraphStyle(r, "two").headIndent == 1.2 * 20)
+    }
+
+    @Test func bulletHangsOneLevelAndTabsToTheText() {
+        let r = MarkdownRenderer.render("- a\n  - b", style: style)
+        let outer = paragraphStyle(r, "•\ta")
+        #expect(outer.firstLineHeadIndent == 0 && outer.headIndent == 24)
+        #expect(outer.tabStops.map(\.location) == [24])
+        let inner = paragraphStyle(r, "•\tb")
+        #expect(inner.firstLineHeadIndent == 24 && inner.headIndent == 48)
+        #expect(inner.tabStops.map(\.location) == [48])
+    }
+
+    @Test func italicEndsWithTheEmphasisEvenWhenNested() {
+        let r = MarkdownRenderer.render("*ital* after and *aa _nest_ tail*", style: style)
+        let italic = NSFontDescriptor.SymbolicTraits.italic
+        #expect(fontAt(r, "ital").fontDescriptor.symbolicTraits.contains(italic))
+        #expect(!fontAt(r, "after").fontDescriptor.symbolicTraits.contains(italic))
+        #expect(fontAt(r, "nest").fontDescriptor.symbolicTraits.contains(italic))
+        #expect(fontAt(r, "tail").fontDescriptor.symbolicTraits.contains(italic))
+    }
+
+    @Test func monospaceEndsWithTheInlineCode() {
+        let r = MarkdownRenderer.render("`code` after", style: style)
+        #expect(fontAt(r, "code").fontDescriptor.symbolicTraits.contains(.monoSpace))
+        #expect(!fontAt(r, "after").fontDescriptor.symbolicTraits.contains(.monoSpace))
+    }
+
+    @Test func eachTableStartsItsOwnRows() {
+        let md = "| a | b |\n|---|---|\n| c | d |\n\ntext\n\n| e | f |\n|---|---|\n| g | h |"
+        #expect(
+            MarkdownRenderer.render(md, style: style).string == "a\tb\nc\td\ntext\ne\tf\ng\th")
+    }
 }
