@@ -9,7 +9,7 @@ json="$(swift test --show-codecov-path)"
 report="$(jq -r '
   .data[0].files[]
   | select(.filename | contains("/Sources/TeleprompterCore/"))
-  | "\(.filename | split("/") | last) \(.summary.lines.percent)"
+  | "\(.filename | split("/") | last) \(.summary.lines.percent // -1)"
 ' "$json")"
 
 if [ -z "$report" ]; then
@@ -18,7 +18,7 @@ if [ -z "$report" ]; then
 fi
 
 echo "$report"
-echo "$report" | awk '$2 < 100 { bad = 1 } END { exit bad }' || {
+echo "$report" | awk '$2 !~ /^-?[0-9.]+$/ || $2 + 0 < 100 { bad = 1 } END { exit bad }' || {
   echo "Coverage below 100% in TeleprompterCore" >&2
   exit 1
 }

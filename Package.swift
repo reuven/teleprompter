@@ -5,7 +5,8 @@ let package = Package(
     name: "Teleprompter",
     platforms: [.macOS(.v26)],
     dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.9.0")
+        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.9.0"),
+        .package(url: "https://github.com/x-sheep/swift-property-based.git", from: "2.0.1"),
     ],
     targets: [
         .target(
@@ -18,7 +19,10 @@ let package = Package(
         ),
         .testTarget(
             name: "TeleprompterCoreTests",
-            dependencies: ["TeleprompterCore"]
+            dependencies: [
+                "TeleprompterCore",
+                .product(name: "PropertyBased", package: "swift-property-based"),
+            ]
         ),
     ],
     swiftLanguageModes: [.v6]
