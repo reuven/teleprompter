@@ -163,7 +163,8 @@ private let mediumNotes = (1...8).map { "- point number \($0)" }.joined(separato
 @MainActor @Test func clampedCaretNeverLandsInsideAnEmoji() {
     let store = makeStore("abc")
     let v = NotesContentView(store: store, maxFontSize: 32, mode: .edit, frame: frame)
-    v.editor.setSelectedRange(NSRange(location: 2, length: 0))  // would sit between a surrogate pair
+    // Offset 2 would sit between the halves of a surrogate pair in the new text.
+    v.editor.setSelectedRange(NSRange(location: 2, length: 0))
     store.userEdited("a😀")
     v.notesChanged()
     #expect(v.editor.selectedRange() == NSRange(location: 1, length: 0))

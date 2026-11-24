@@ -15,8 +15,11 @@ import AppKit
 /// - the `NotesPanel`, whose `sharingType` is written once, in init, and never again (not even
 ///   the same value), because on macOS 26.5 re-setting it can silently fail;
 /// - the `CaptureTestWindow`, which must stay recordable: it's the positive control;
-/// - windows at status-bar level or above, which is how the menu-bar icon and its menus are
-///   drawn. Those stay as AppKit made them so the icon behaves normally.
+/// - the status item's own window (the menu-bar icon), left as AppKit made it.
+///
+/// Exemptions are by identity, never by window level: system popups (input-method candidates,
+/// emoji picker, completion lists, tooltips, pop-up menus) often sit at or above status-bar
+/// level, so a level rule would let exactly those through.
 ///
 /// The shield runs after every event-loop pass (`NSApplication.didUpdateNotification`), so a
 /// window created later is hidden before it's drawn on screen. It also runs once at launch and
@@ -25,18 +28,19 @@ import AppKit
 enum CaptureShield {
     /// Whether a window with these traits should be set to `sharingType = .none`.
     static func shouldHide(
-        isNotesPanel: Bool, isCaptureTestWindow: Bool, level: NSWindow.Level,
+        isNotesPanel: Bool, isCaptureTestWindow: Bool, isStatusItemWindow: Bool,
         sharingType: NSWindow.SharingType
     ) -> Bool {
-        !isNotesPanel && !isCaptureTestWindow && level < .statusBar && sharingType != .none
+        !isNotesPanel && !isCaptureTestWindow && !isStatusItemWindow && sharingType != .none
     }
 
-    /// Applies the rule to `windows` (in the app, `NSApp.windows`).
-    static func apply(to windows: [NSWindow]) {
+    /// Applies the rule to `windows` (in the app, `NSApp.windows`); `statusItemWindow` is the
+    /// menu-bar icon's window, if it has one.
+    static func apply(to windows: [NSWindow], statusItemWindow: NSWindow?) {
         for window in windows
         where shouldHide(
             isNotesPanel: window is NotesPanel, isCaptureTestWindow: window is CaptureTestWindow,
-            level: window.level, sharingType: window.sharingType)
+            isStatusItemWindow: window === statusItemWindow, sharingType: window.sharingType)
         {
             window.sharingType = .none
         }
@@ -44,11 +48,17 @@ enum CaptureShield {
 
     /// Re-applies the rule to all of the app's windows after every event-loop pass. Keep the
     /// returned token for as long as the shield should stay up.
-    static func start(center: NotificationCenter = .default) -> NSObjectProtocol {
+    ///
+    /// `statusItemWindow` is asked on each pass, since the icon's window can be recreated.
+    static func start(
+        center: NotificationCenter, statusItemWindow: @escaping @MainActor () -> NSWindow?
+    ) -> NSObjectProtocol {
         center.addObserver(
             forName: NSApplication.didUpdateNotification, object: nil, queue: .main
         ) { _ in
-            MainActor.assumeIsolated { apply(to: NSApplication.shared.windows) }
+            MainActor.assumeIsolated {
+                apply(to: NSApplication.shared.windows, statusItemWindow: statusItemWindow())
+            }
         }
     }
 }

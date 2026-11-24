@@ -5,81 +5,74 @@ import Testing
 @testable import Teleprompter
 
 // The shield hides every window the process owns from capture, except the three it must not
-// touch: the notes panel (its sharingType is written once, in init, and never again), the capture
-// test window (it must stay recordable), and status-bar-level windows (the menu-bar icon).
+// touch, picked out by identity, never by level: the notes panel (its sharingType is written once,
+// in init, and never again), the capture test window (it must stay recordable), and the status
+// item's own window (the menu-bar icon). System popups often sit at or above status-bar level, so
+// a level-based exemption would let them through.
+
+@MainActor private func hide(
+    panel: Bool = false, test: Bool = false, statusItem: Bool = false,
+    _ sharing: NSWindow.SharingType = .readOnly
+) -> Bool {
+    CaptureShield.shouldHide(
+        isNotesPanel: panel, isCaptureTestWindow: test, isStatusItemWindow: statusItem,
+        sharingType: sharing)
+}
 
 @MainActor @Test func hidesAnOrdinaryRecordableWindow() {
-    #expect(
-        CaptureShield.shouldHide(
-            isNotesPanel: false, isCaptureTestWindow: false, level: .normal, sharingType: .readOnly)
-    )
-    #expect(
-        CaptureShield.shouldHide(
-            isNotesPanel: false, isCaptureTestWindow: false, level: .floating,
-            sharingType: .readOnly))
+    #expect(hide())
 }
 
 @MainActor @Test func leavesAlreadyHiddenWindowsAlone() {
-    #expect(
-        !CaptureShield.shouldHide(
-            isNotesPanel: false, isCaptureTestWindow: false, level: .normal, sharingType: .none))
+    #expect(!hide(.none))
 }
 
 @MainActor @Test func neverWritesTheNotesPanel() {
-    #expect(
-        !CaptureShield.shouldHide(
-            isNotesPanel: true, isCaptureTestWindow: false, level: .floating, sharingType: .readOnly
-        ))
+    #expect(!hide(panel: true))
 }
 
 @MainActor @Test func leavesTheCaptureTestWindowRecordable() {
-    #expect(
-        !CaptureShield.shouldHide(
-            isNotesPanel: false, isCaptureTestWindow: true, level: .floating, sharingType: .readOnly
-        ))
+    #expect(!hide(test: true))
 }
 
-@MainActor @Test func leavesStatusBarLevelWindowsAlone() {
-    for level: NSWindow.Level in [.statusBar, .popUpMenu, .screenSaver] {
-        #expect(
-            !CaptureShield.shouldHide(
-                isNotesPanel: false, isCaptureTestWindow: false, level: level,
-                sharingType: .readOnly))
-    }
-    #expect(
-        CaptureShield.shouldHide(
-            isNotesPanel: false, isCaptureTestWindow: false,
-            level: NSWindow.Level(NSWindow.Level.statusBar.rawValue - 1), sharingType: .readOnly))
+@MainActor @Test func leavesTheStatusItemWindowAlone() {
+    #expect(!hide(statusItem: true))
 }
 
-@MainActor @Test func applyHidesHelpersButNotTheTestWindowOrPanel() {
-    let helper = NSWindow(
+/// An off-screen borderless window at `level`, standing in for a helper window macOS creates.
+@MainActor private func helper(level: NSWindow.Level = .normal) -> NSWindow {
+    let w = NSWindow(
         contentRect: CGRect(x: -20000, y: -20000, width: 10, height: 10), styleMask: [.borderless],
         backing: .buffered, defer: false)
+    w.level = level
+    return w
+}
+
+@MainActor @Test func applyHidesHelpersAtAnyLevelButNotTheExemptWindows() {
+    let low = helper()
+    let popup = helper(level: .popUpMenu)
+    let status = helper(level: .statusBar)
     let test = CaptureTestWindow(near: .zero, within: CGRect(x: 0, y: 0, width: 1440, height: 875))
     let panel = NotesPanel(settings: Settings())
-    #expect(helper.sharingType == .readOnly)
-    CaptureShield.apply(to: [helper, test, panel])
-    #expect(helper.sharingType == .none)
+    #expect(low.sharingType == .readOnly && popup.sharingType == .readOnly)
+    CaptureShield.apply(to: [low, popup, status, test, panel], statusItemWindow: status)
+    #expect(low.sharingType == .none && popup.sharingType == .none)
+    #expect(status.sharingType == .readOnly)
     #expect(test.sharingType == .readOnly && panel.sharingType == .none)
 }
 
 @MainActor @Test func shieldCoversWindowsCreatedLaterOnEachEventLoopPass() {
     // The app posts didUpdateNotification after every event-loop pass; here it's posted by hand.
     let center = NotificationCenter()
-    let token = CaptureShield.start(center: center)
+    let status = helper(level: .statusBar)
+    let token = CaptureShield.start(center: center) { status }
     defer { center.removeObserver(token) }
-    let later = NSWindow(
-        contentRect: CGRect(x: -20000, y: -20000, width: 10, height: 10), styleMask: [.borderless],
-        backing: .buffered, defer: false)
+    let later = helper(level: .popUpMenu)
     let test = CaptureTestWindow(near: .zero, within: CGRect(x: 0, y: 0, width: 1440, height: 875))
-    later.orderFrontRegardless()
-    test.orderFrontRegardless()
-    defer {
-        later.orderOut(nil)
-        test.orderOut(nil)
-    }
+    for window in [later, test, status] { window.orderFrontRegardless() }
+    defer { for window in [later, test, status] { window.orderOut(nil) } }
     #expect(later.sharingType == .readOnly)
     center.post(name: NSApplication.didUpdateNotification, object: nil)
     #expect(later.sharingType == .none && test.sharingType == .readOnly)
+    #expect(status.sharingType == .readOnly)
 }

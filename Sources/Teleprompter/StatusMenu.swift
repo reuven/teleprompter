@@ -32,6 +32,10 @@ final class StatusMenu: NSObject {
         statusItem.menu = buildMenu()
     }
 
+    /// The menu-bar icon's own window, which `CaptureShield` and the stray-window check leave
+    /// alone (by identity) so the icon behaves normally.
+    var statusItemWindow: NSWindow? { statusItem.button?.window }
+
     /// The mode item names the action it performs: the mode you'd switch to, not the current one.
     static func modeTitle(for mode: Mode) -> String {
         mode == .edit ? "Lock for Recording" : "Edit Notes"

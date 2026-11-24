@@ -38,7 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// recorded. Then registers ⌃⌥⌘N.
     func applicationDidFinishLaunching(_ notification: Notification) {
         settings = settingsStore.load()
-        shieldToken = CaptureShield.start()
+        shieldToken = CaptureShield.start(center: .default) { [weak self] in
+            self?.statusMenu?.statusItemWindow
+        }
         let store = NotesStore(scratchURL: Self.scratchURL())
         self.store = store
         modeState = ModeState.initial(hasNotes: !store.text.isEmpty)
@@ -162,12 +164,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     //
     // Runs the shield first, so helper windows created since the last event-loop pass are hidden,
     // then checks the panel and every other on-screen window of ours (bar the capture test window
-    // and the menu bar's).
+    // and the status item's window, exempted by identity).
     private func checkPanelHidden() {
         guard let panel else { return }
-        CaptureShield.apply(to: NSApp.windows)
+        let statusItemWindow = statusMenu?.statusItemWindow
+        CaptureShield.apply(to: NSApp.windows, statusItemWindow: statusItemWindow)
         let state = windowServerSharingState(windowNumber: panel.windowNumber)
-        let allowed = Set([testWindow?.windowNumber].compactMap { $0 })
+        let allowed = Set(
+            [testWindow?.windowNumber, statusItemWindow?.windowNumber].compactMap { $0 })
         let warning =
             captureWarning(sharingState: state)
             ?? strayWindowWarning(windowServerWindows(ownedBy: getpid()), allowed: allowed)

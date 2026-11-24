@@ -42,14 +42,13 @@ import Testing
 }
 
 // Hardened check: besides the panel, any window of ours that is on screen and recordable is a
-// leak, unless it's the capture test window (allowed by number) or at status-bar level or above.
+// leak, unless it's one we allow by identity (the capture test window and the status item's
+// window). Level grants nothing: system popups often sit at status-bar level or above.
 
 private let warning = "⚠ Notes may be visible to recordings — quit and relaunch"
 
-private func window(
-    _ number: Int, sharing: Int? = 1, onScreen: Bool = true, layer: Int = 0
-) -> WindowServerWindow {
-    WindowServerWindow(number: number, sharingState: sharing, isOnScreen: onScreen, layer: layer)
+private func window(_ number: Int, sharing: Int? = 1, onScreen: Bool = true) -> WindowServerWindow {
+    WindowServerWindow(number: number, sharingState: sharing, isOnScreen: onScreen)
 }
 
 @Test func hiddenOrOffScreenWindowsAreFine() {
@@ -63,14 +62,9 @@ private func window(
     #expect(strayWindowWarning([window(7, sharing: nil)], allowed: []) == warning)
 }
 
-@Test func captureTestWindowIsAllowed() {
-    #expect(strayWindowWarning([window(7)], allowed: [7]) == nil)
+@Test func allowedWindowsAreExemptByNumber() {
+    #expect(strayWindowWarning([window(7), window(9)], allowed: [7, 9]) == nil)
     #expect(strayWindowWarning([window(7), window(8)], allowed: [7]) == warning)
-}
-
-@Test func statusBarAndMenuLayersAreAllowed() {
-    #expect(strayWindowWarning([window(1, layer: 25), window(2, layer: 101)], allowed: []) == nil)
-    #expect(strayWindowWarning([window(1, layer: 24)], allowed: []) == warning)
 }
 
 @MainActor @Test func listsOnlyThisProcesssWindowsFromTheWindowServer() {
@@ -86,7 +80,6 @@ private func window(
     let entry = windowServerWindows(ownedBy: getpid()).first { $0.number == shown.windowNumber }
     #expect(
         entry
-            == WindowServerWindow(
-                number: shown.windowNumber, sharingState: 1, isOnScreen: false, layer: 0))
+            == WindowServerWindow(number: shown.windowNumber, sharingState: 1, isOnScreen: false))
     #expect(windowServerWindows(ownedBy: -1).isEmpty)
 }

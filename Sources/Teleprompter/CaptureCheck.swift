@@ -35,8 +35,6 @@ struct WindowServerWindow: Equatable {
     let sharingState: Int?
     /// Whether the window is currently ordered in (and so could be captured).
     let isOnScreen: Bool
-    /// `kCGWindowLayer`; status-bar and menu windows sit at 25 and above.
-    let layer: Int
 }
 
 /// Every window the window server lists for process `pid`.
@@ -49,23 +47,20 @@ func windowServerWindows(ownedBy pid: pid_t) -> [WindowServerWindow] {
         WindowServerWindow(
             number: $0[kCGWindowNumber as String] as? Int ?? 0,
             sharingState: $0[kCGWindowSharingState as String] as? Int,
-            isOnScreen: $0[kCGWindowIsOnscreen as String] as? Bool ?? false,
-            layer: $0[kCGWindowLayer as String] as? Int ?? 0)
+            isOnScreen: $0[kCGWindowIsOnscreen as String] as? Bool ?? false)
     }
 }
 
 /// The menu warning if any of our windows is on screen and recordable, other than the windows
-/// in `allowed` (the capture test window) and status-bar-level windows (the menu-bar icon and
-/// its menus). Otherwise nil.
+/// numbered in `allowed` (the capture test window and the status item's window). Otherwise nil.
 ///
 /// Why: `CaptureShield` hides helper windows as they appear. This is the independent check that
 /// it worked, read from the window server rather than AppKit. An unreported sharing state counts
-/// as recordable, as it does for the panel.
+/// as recordable, as it does for the panel. Exemptions are by identity, not layer, because system
+/// popups often sit at or above status-bar level.
 func strayWindowWarning(_ windows: [WindowServerWindow], allowed: Set<Int>) -> String? {
-    let statusBarLayer = Int(CGWindowLevelForKey(.statusWindow))
     let stray = windows.contains {
-        $0.isOnScreen && $0.sharingState != 0 && $0.layer < statusBarLayer
-            && !allowed.contains($0.number)
+        $0.isOnScreen && $0.sharingState != 0 && !allowed.contains($0.number)
     }
     return stray ? captureWarning(sharingState: nil) : nil
 }
