@@ -468,8 +468,8 @@ Property:
     2. Assemble `build/Teleprompter.app` with `Contents/MacOS/Teleprompter` and `Contents/Info.plist` (`LSUIElement` true, `CFBundleIdentifier` `co.lerner.teleprompter`, `LSMinimumSystemVersion` 26.0, version from `git describe --tags --always`).
     3. `codesign --force --sign - build/Teleprompter.app`
 
-- [ ] **Step 1:** Create a branch: `feat/app-shell`.
-- [ ] **Step 2: Write failing panel tests** (these pin the anti-goals; no screen needed):
+- [x] **Step 1:** Create a branch: `feat/app-shell`.
+- [x] **Step 2: Write failing panel tests** (these pin the anti-goals; no screen needed):
 
 ```swift
 @MainActor @Test func newPanelIsHiddenFromCapture() { #expect(NotesPanel(settings: Settings()).sharingType == .none) }
@@ -491,15 +491,15 @@ Property:
 ```
 
 Run `testslot -- swift test --filter NotesPanelTests`. Expected: FAIL (`NotesPanel` not defined).
-- [ ] **Step 2b:** Implement `NotesPanel(settings:)` (with `var backgroundAlpha: Double` exposed for the test). Then implement the status item with Quit and the capture-check toggle, and placement on launch (`Placement.restoredFrame` ?? `defaultFrame(on: cameraScreen)`). Show fixed sample text. Save the frame to settings on move and resize.
-- [ ] **Step 3:** Run `scripts/build-app.sh && open build/Teleprompter.app`. Expected: no Dock icon, a menu-bar icon, and the panel at top center.
-- [ ] **Step 4: CHECKPOINT with Reuven.** He records with ScreenFlow while:
+- [x] **Step 2b:** Implement `NotesPanel(settings:)` (with `var backgroundAlpha: Double` exposed for the test). Then implement the status item with Quit and the capture-check toggle, and placement on launch (`Placement.restoredFrame` ?? `defaultFrame(on: cameraScreen)`). Show fixed sample text. Save the frame to settings on move and resize.
+- [x] **Step 3:** Run `scripts/build-app.sh && open build/Teleprompter.app`. Expected: no Dock icon, a menu-bar icon, and the panel at top center.
+- [x] **Step 4: CHECKPOINT with Reuven.** He records with ScreenFlow while:
   - the panel is hidden
   - he toggles Show in Recordings
   - a full-screen app is in front
 
   Expected: the panel is absent from the recording except during the test toggle, where it has the red border. **Stop the plan if hiding fails**, and go back to the spec's fallback discussion.
-- [ ] **Step 5:** Run `scripts/coverage.sh`. Expected: Core and `NotesPanel.swift` at 100%. Lint. Commit ("Add app shell, panel, build script"), push, merge, delete the branch.
+- [x] **Step 5:** Run `scripts/coverage.sh`. Expected: Core and `NotesPanel.swift` at 100%. Lint. Commit ("Add app shell, panel, build script"), push, merge, delete the branch.
 
 ---
 
