@@ -46,7 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         URL.applicationSupportDirectory.appending(path: "Teleprompter/scratch.md")
     }
 
-    /// Loads the notes, builds the panel and menu once AppKit is ready, places the panel, and
+    /// Loads the notes (reopening the last file if it still exists), builds the panel and menu
+    /// once AppKit is ready, places the panel (the saved frame if it's still on a display), and
     /// shows it without activating the app, so launching never steals focus from the app being
     /// recorded. Then registers ⌃⌥⌘N.
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -56,10 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let store = NotesStore(scratchURL: Self.scratchURL())
         // The last file only if it's still there; otherwise scratch, quietly.
-        if let url = settings.launchFile(exists: { FileManager.default.fileExists(atPath: $0.path) }
-        ) {
-            store.open(url)
-        }
+        let exists = { (url: URL) in FileManager.default.fileExists(atPath: url.path) }
+        if let url = settings.launchFile(exists: exists) { store.open(url) }
         self.store = store
         recordSource()
         modeState = ModeState.initial(hasNotes: !store.text.isEmpty)
@@ -132,10 +131,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Delays quitting until pending edits are written, so the last keystrokes before Quit are
     /// never lost to the save debounce.
     ///
-    /// Also saves the panel's frame now, in case a move ended within the save delay.
+    /// Also saves the panel's frame now if a move or resize is still waiting out the save delay.
+    /// Only then: an untouched launch position isn't saved as if the user had chosen it.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        frameSaveTask?.cancel()
-        saveFrame()
+        if let frameSaveTask {
+            frameSaveTask.cancel()
+            saveFrame()
+        }
         guard let store else { return .terminateNow }
         Task {
             await store.flush()
@@ -164,6 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func saveFrame() {
+        frameSaveTask = nil
         guard let panel else { return }
         settings.windowFrame = panel.frame
         settingsStore.save(settings)
