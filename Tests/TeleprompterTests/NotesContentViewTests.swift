@@ -50,6 +50,48 @@ private let mediumNotes = (1...8).map { "- point number \($0)" }.joined(separato
     #expect(!e.isAutomaticTextCompletionEnabled && !e.smartInsertDeleteEnabled)
 }
 
+// The editor must not open system windows that quote the notes (Look Up, Services, Writing Tools,
+// spelling or completion popups): those are other processes' or unshielded windows and could be
+// recorded.
+
+@MainActor @Test func editorHasNoSpellingGrammarOrWritingTools() {
+    let e = NotesContentView(store: makeStore(), maxFontSize: 32, mode: .edit, frame: frame).editor
+    #expect(type(of: e) == NotesEditor.self && e.enclosingScrollView != nil)
+    #expect(!e.isContinuousSpellCheckingEnabled && !e.isGrammarCheckingEnabled)
+    #expect(e.writingToolsBehavior == .none)
+}
+
+@MainActor @Test func editorContextMenuOffersOnlyClipboardEditing() throws {
+    let e = NotesContentView(store: makeStore("x"), maxFontSize: 32, mode: .edit, frame: frame)
+        .editor
+    let click = try #require(
+        NSEvent.mouseEvent(
+            with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+    let menu = try #require(e.menu(for: click))
+    #expect(menu.items.map(\.title) == ["Cut", "Copy", "Paste", "Select All"])
+    #expect(
+        menu.items.map(\.action)
+            == [
+                #selector(NSText.cut(_:)), #selector(NSText.copy(_:)),
+                #selector(NSText.paste(_:)), #selector(NSText.selectAll(_:)),
+            ])
+    #expect(!menu.allowsContextMenuPlugIns && !menu.automaticallyInsertsWritingToolsItems)
+}
+
+@MainActor @Test func editorCompletionAndLookUpDoNothing() throws {
+    let store = makeStore("hel")
+    let e = NotesContentView(store: store, maxFontSize: 32, mode: .edit, frame: frame).editor
+    e.setSelectedRange(NSRange(location: 3, length: 0))
+    e.complete(nil)
+    let click = try #require(
+        NSEvent.mouseEvent(
+            with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+    e.quickLook(with: click)
+    #expect(e.string == "hel" && store.text == "hel")
+}
+
 @MainActor @Test func typingGoesToTheStore() {
     let store = makeStore()
     let v = NotesContentView(store: store, maxFontSize: 32, mode: .edit, frame: frame)

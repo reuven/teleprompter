@@ -16,7 +16,7 @@ final class NotesContentView: NSView, NSTextViewDelegate {
     /// The model: the editor writes to it, and both children show its text.
     let store: NotesStore
     /// Edit mode's text view, raw Markdown in a fixed-size monospaced font.
-    let editor: NSTextView
+    let editor: NotesEditor
     /// Scrolls the editor; long notes scroll rather than shrink while typing.
     let editorScrollView: NSScrollView
     /// Recording mode's view: the rendered notes, not editable or selectable.
@@ -58,9 +58,9 @@ final class NotesContentView: NSView, NSTextViewDelegate {
         self.store = store
         self.maxFontSize = maxFontSize
         self.mode = mode
-        editorScrollView = NSTextView.scrollableTextView()
-        // scrollableTextView() always supplies an NSTextView document view.
-        editor = editorScrollView.documentView as! NSTextView
+        editorScrollView = NotesEditor.scrollableTextView()
+        // scrollableTextView() builds a text view of the class it's called on.
+        editor = editorScrollView.documentView as! NotesEditor
         let layoutManager = NSLayoutManager()
         readerStorage.addLayoutManager(layoutManager)
         layoutManager.addTextContainer(readerContainer)
@@ -137,6 +137,10 @@ final class NotesContentView: NSView, NSTextViewDelegate {
         editor.isAutomaticDataDetectionEnabled = false
         editor.isAutomaticTextCompletionEnabled = false
         editor.smartInsertDeleteEnabled = false
+        // No checking UI: suggestions and Writing Tools open windows that quote the notes.
+        editor.isContinuousSpellCheckingEnabled = false
+        editor.isGrammarCheckingEnabled = false
+        editor.writingToolsBehavior = .none
         editor.drawsBackground = false
         editor.textColor = .white
         editor.insertionPointColor = .white
@@ -205,4 +209,33 @@ final class NotesContentView: NSView, NSTextViewDelegate {
         fittedOverflows = layout.showsMoreBelow
         badge.isHidden = !layout.showsMoreBelow
     }
+}
+
+/// The edit-mode text view, with every feature that would show the notes in another window
+/// switched off.
+///
+/// Why: the notes panel is hidden from capture, but Look Up popovers, Services, Writing Tools,
+/// spelling suggestions and completion lists are separate windows (some in other processes, out
+/// of `CaptureShield`'s reach) that quote the text, so they could appear in a recording. The
+/// context menu keeps only Cut, Copy, Paste and Select All; completion and Look Up do nothing.
+final class NotesEditor: NSTextView {
+    /// Only clipboard editing; no Look Up, Search, Services, Writing Tools or spelling items.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+        menu.allowsContextMenuPlugIns = false
+        menu.automaticallyInsertsWritingToolsItems = false
+        for (title, action) in [
+            ("Cut", #selector(NSText.cut(_:))), ("Copy", #selector(NSText.copy(_:))),
+            ("Paste", #selector(NSText.paste(_:))), ("Select All", #selector(NSText.selectAll(_:))),
+        ] {
+            menu.addItem(NSMenuItem(title: title, action: action, keyEquivalent: ""))
+        }
+        return menu
+    }
+
+    /// No completion list (⌥⎋ / F5): it's a separate window listing words from the notes.
+    override func complete(_ sender: Any?) {}
+
+    /// No Look Up (force click, three-finger tap): its popover quotes the selected text.
+    override func quickLook(with event: NSEvent) {}
 }
