@@ -3,8 +3,9 @@
 # notes stay out of recordings (NotesPanel.swift, CaptureTestWindow.swift, CaptureCheck.swift),
 # plus the notes view, the global shortcut and the capture shield (NotesContentView.swift,
 # HotKey.swift, CaptureShield.swift), plus every menu decision, the Open… filter, the quit
-# check and the frame saver (MenuModel.swift, NotesFileChooser.swift, QuitDecision.swift,
-# FrameSaver.swift), has 100% line coverage. AppDelegate, StatusMenu
+# check, the frame saver and the focus rule after modals (MenuModel.swift,
+# NotesFileChooser.swift, QuitDecision.swift, FrameSaver.swift, FocusReturn.swift), has 100%
+# line coverage. AppDelegate, StatusMenu
 # and main.swift are thin AppKit glue, checked by hand.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -46,3 +47,4 @@ check MenuModel.swift "$(gate /Sources/Teleprompter/MenuModel.swift)"
 check NotesFileChooser.swift "$(gate /Sources/Teleprompter/NotesFileChooser.swift)"
 check QuitDecision.swift "$(gate /Sources/Teleprompter/QuitDecision.swift)"
 check FrameSaver.swift "$(gate /Sources/Teleprompter/FrameSaver.swift)"
+check FocusReturn.swift "$(gate /Sources/Teleprompter/FocusReturn.swift)"

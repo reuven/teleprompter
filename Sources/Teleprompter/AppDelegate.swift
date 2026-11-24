@@ -147,11 +147,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let store else { return .terminateNow }
         Task {
             await store.flush()
+            let previous = FocusReturn.previousApp(front: NSWorkspace.shared.frontmostApplication)
             let quit = QuitDecision.shouldQuit(hasUnsavedChanges: store.hasUnsavedChanges) {
                 // The alert must be in front to be answered, so the app activates for it.
                 NSApp.activate()
-                return QuitDecision.makeAlert(detail: store.lastError).runModal()
+                return QuitDecision.makeAlert(detail: store.unsavedChangesReason).runModal()
             }
+            // Staying open after Cancel: focus goes back as after any modal.
+            if !quit { returnFocus(to: previous) }
             NSApp.reply(toApplicationShouldTerminate: quit)
         }
         return .terminateLater
@@ -213,8 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// the notes panel takes key focus again. The dialog may itself be recorded: see
     /// `NotesFileChooser` for why that is accepted.
     private func chooseFile() {
-        let front = NSWorkspace.shared.frontmostApplication
-        let previous = front == NSRunningApplication.current ? nil : front
+        let previous = FocusReturn.previousApp(front: NSWorkspace.shared.frontmostApplication)
         let chooser = NotesFileChooser()
         let dialog = NSOpenPanel()
         chooser.configure(dialog)
@@ -223,10 +225,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         dialog.orderFrontRegardless()
         let response = withExtendedLifetime(chooser) { dialog.runModal() }
         if response == .OK, let url = dialog.url { openFile(url) }
-        if modeState.mode == .recording {
-            if NSApp.isActive { previous?.activate() }
-        } else {
-            panel?.makeKey()
+        returnFocus(to: previous)
+    }
+
+    // After a modal activated the app; see FocusReturn for the rule.
+    private func returnFocus(to previous: NSRunningApplication?) {
+        switch FocusReturn.after(
+            mode: modeState.mode, appIsActive: NSApp.isActive, previous: previous)
+        {
+        case .reactivate(let app): app.activate()
+        case .makePanelKey: panel?.makeKey()
+        case .none: break
         }
     }
 

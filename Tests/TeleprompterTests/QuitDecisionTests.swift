@@ -31,3 +31,8 @@ import Testing
     #expect(alert.alertStyle == .warning)
     #expect(!QuitDecision.makeAlert(detail: nil).informativeText.isEmpty)
 }
+
+@MainActor @Test func quitAnywayIsMarkedDestructive() {
+    let alert = QuitDecision.makeAlert(detail: nil)
+    #expect(alert.buttons[1].hasDestructiveAction && !alert.buttons[0].hasDestructiveAction)
+}

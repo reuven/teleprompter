@@ -16,8 +16,9 @@ enum QuitDecision {
         return askUser() == .alertSecondButtonReturn
     }
 
-    /// The warning shown before quitting with unsaved notes; `detail` is the store's last error,
-    /// which names what couldn't be saved.
+    /// The warning shown before quitting with unsaved notes. `detail` is
+    /// `NotesStore.unsavedChangesReason` (which names what couldn't be saved), or nil for the
+    /// generic text when the current error is about something else.
     @MainActor static func makeAlert(detail: String?) -> NSAlert {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -26,7 +27,9 @@ enum QuitDecision {
             detail ?? "Some changes haven't been written to disk and will be lost if you quit."
         // Set explicitly: Return must cancel, never quit, whatever NSAlert would pick.
         alert.addButton(withTitle: "Cancel").keyEquivalent = "\r"
-        alert.addButton(withTitle: "Quit Anyway").keyEquivalent = ""
+        let quit = alert.addButton(withTitle: "Quit Anyway")
+        quit.keyEquivalent = ""
+        quit.hasDestructiveAction = true
         return alert
     }
 }
