@@ -409,8 +409,8 @@ Properties (Review Focus #5), with `count: 50` because each check renders text:
   - If the open file disappears and doesn't come back: switch to `.scratch` and set `lastError`.
 - Self-write suppression (Review Focus #4): after saving, remember the bytes written. When the watcher fires and the file content equals them, ignore the event.
 
-- [ ] **Step 1:** Create a branch: `feat/notes-store`.
-- [ ] **Step 2: Write failing tests** (temp directory; `saveDelay: .milliseconds(10)`):
+- [x] **Step 1:** Create a branch: `feat/notes-store`.
+- [x] **Step 2: Write failing tests** (temp directory; `saveDelay: .milliseconds(10)`):
 
 ```swift
 @Test func scratchPersists()            // userEdited("a"); flush; new store at same scratchURL → text == "a"
@@ -432,10 +432,10 @@ Property:
     // userEdited(s); flush; new store at same scratchURL → text == s
 ```
 
-- [ ] **Step 3:** Run `testslot -- swift test --filter NotesStoreTests`. Expected: FAIL.
-- [ ] **Step 4:** Implement `NotesStore.swift`. Debounce with a cancellable `Task` that sleeps `saveDelay`. Write scratch atomically; write files atomically.
-- [ ] **Step 5:** Run the tests 3 times, then `scripts/coverage.sh`. Expected: all PASS.
-- [ ] **Step 6:** Lint, commit ("Add notes store with save-back and reload"), push, merge, delete the branch.
+- [x] **Step 3:** Run `testslot -- swift test --filter NotesStoreTests`. Expected: FAIL.
+- [x] **Step 4:** Implement `NotesStore.swift`. Debounce with a cancellable `Task` that sleeps `saveDelay`. Write scratch atomically; write files atomically.
+- [x] **Step 5:** Run the tests 3 times, then `scripts/coverage.sh`. Expected: all PASS.
+- [x] **Step 6:** Lint, commit ("Add notes store with save-back and reload"), push, merge, delete the branch.
 - [ ] **Step 7: Mutation testing on `TeleprompterCore`.** On a new branch, `chore/mutation`:
   1. Install Muter (`brew install muter-mutation-testing/formulae/muter`) and run `muter init`. Configure it to run `swift test` through testslot and to mutate only `Sources/TeleprompterCore`.
   2. Run it.

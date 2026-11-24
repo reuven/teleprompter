@@ -17,8 +17,9 @@ Design: [`docs/superpowers/specs/2026-11-24-teleprompter-design.md`](docs/superp
 - [x] 4. Markdown renderer
 - [x] 5. Shrink-to-fit (main-actor isolated)
 - [x] 6. File watcher (survives atomic saves; signals once when a file vanishes)
-- [ ] 7. *(after 8)* Notes store (scratch, open file, save-back, reload) + Muter mutation testing on Core
-- [ ] 8. *(moved ahead of 7)* App shell + **ScreenFlow checkpoint with Reuven** — *in progress*
+- [x] 7. Notes store (scratch, open file, save-back, reload; never overwrites what it can't read)
+- [ ] 7b. Muter mutation testing on Core — *in progress*
+- [ ] 8. *(moved ahead of 7)* App shell + **ScreenFlow checkpoint with Reuven** — *built and reviewed; awaiting Reuven's ScreenFlow + keyboard check*
 - [ ] 9. Edit/recording views, global hotkey ⌃⌥⌘N
 - [ ] 10. File menu, appearance, persistence wiring
 - [ ] 11. Release v0.1.0 (manual checklist, README, tag, GitHub release)
