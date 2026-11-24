@@ -219,6 +219,20 @@ private func contents(_ url: URL) throws -> String {
         #expect(try contents(file) == "new")
     }
 
+    @Test func eachEditRestartsTheDebounce() async throws {
+        let file = try makeFile("old")
+        let store = makeStore(saveDelay: .milliseconds(400))
+        store.open(file)
+        store.userEdited("first")
+        try await Task.sleep(for: .milliseconds(200))
+        store.userEdited("second")
+        // 500 ms after the first edit but only 300 ms after the second: a first timer that
+        // was not cancelled would already have written.
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(try contents(file) == "old", "the second edit restarts the delay")
+        #expect(await waitUntil { (try? contents(file)) == "second" })
+    }
+
     @Test func flushWithNothingPendingWritesNothing() async {
         let store = makeStore()
         await store.flush()

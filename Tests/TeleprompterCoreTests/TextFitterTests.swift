@@ -107,3 +107,12 @@ private let markdownGen = Gen.oneOf(Gen.character(in: "a"..."z"), Gen.always(" "
         if r.overflows { #expect(r.fontSize == 14) }
     }
 }
+
+@Test @MainActor func heightExactlyEqualToBoxFits() {
+    // Known answer: a box whose height equals the note's measured height at the maximum
+    // size is a fit (the comparison is <=, not <), so no shrinking and no overflow.
+    let md = "- point one\n- point two"
+    let exact = CGSize(width: 600, height: height(md, 40, 600))
+    #expect(
+        TextFitter.fit(md, maxFontSize: 40, in: exact) == FitResult(fontSize: 40, overflows: false))
+}
