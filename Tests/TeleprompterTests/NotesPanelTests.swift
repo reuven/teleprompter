@@ -42,10 +42,13 @@ import Testing
     #expect(p.styleMask.contains(.borderless) && p.styleMask.contains(.resizable))
 }
 
-@MainActor @Test func showsSampleTextAtSettingsFontSize() {
-    let p = NotesPanel(settings: Settings(fontSize: 40))
-    #expect(p.textLabel.stringValue == NotesPanel.sampleText)
-    #expect(p.textLabel.font?.pointSize == 40 && p.textLabel.textColor == .white)
+@MainActor @Test func showsItsContentInsetByPaddingAndResizesIt() {
+    let content = NSView()
+    let p = NotesPanel(settings: Settings(), content: content)
+    #expect(content.superview === p.backgroundView && p.content === content)
+    #expect(content.frame == p.backgroundView.bounds.insetBy(dx: 20, dy: 20))
+    p.setContentSize(CGSize(width: 800, height: 300))
+    #expect(content.frame == CGRect(x: 20, y: 20, width: 760, height: 260))
 }
 
 @MainActor @Test func lockingReallyGivesUpKeyStatus() {

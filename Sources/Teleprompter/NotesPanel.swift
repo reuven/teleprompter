@@ -13,13 +13,6 @@ import TeleprompterCore
 /// silently ignored (the window stays recordable while AppKit's getter still says `.none`), so the
 /// capture test uses a separate `CaptureTestWindow` instead of toggling this one.
 final class NotesPanel: NSPanel {
-    /// The text shown until notes files arrive (Task 7); it tells the user how to check hiding.
-    static let sampleText = """
-        Teleprompter — sample notes
-        • This window should NOT appear in your recording
-        • Menu-bar icon › Show in Recordings (Test) shows a red test box that SHOULD appear
-        """
-
     /// Corner radius of the dark background, in points.
     static let cornerRadius: CGFloat = 16
     /// Gap between the background edge and the text, in points.
@@ -34,18 +27,21 @@ final class NotesPanel: NSPanel {
     /// The background's opacity, taken from settings; exposed so tests can check it.
     private(set) var backgroundAlpha: Double
 
-    /// The rounded dark view behind the text.
+    /// The rounded dark view behind the notes.
     let backgroundView: NSView
-    /// The notes text.
-    let textLabel: NSTextField
+    /// What the panel shows: the notes view in the app, inset by `padding` and resized with the
+    /// panel.
+    let content: NSView
 
-    /// Builds the panel with the exact window configuration the hiding depends on.
+    /// Builds the panel with the exact window configuration the hiding depends on, showing
+    /// `content` (in the app, a `NotesContentView`).
     ///
     /// The frame is a default-sized placeholder; the app delegate positions the panel, so this
     /// stays free of screen lookups and can be built in tests.
-    init(settings: Settings) {
+    init(settings: Settings, content: NSView = NSView()) {
         backgroundAlpha = settings.opacity
-        (backgroundView, textLabel) = Self.makeContent(text: Self.sampleText, settings: settings)
+        backgroundView = Self.makeBackground(settings: settings)
+        self.content = content
         super.init(
             contentRect: CGRect(origin: .zero, size: Placement.defaultSize),
             styleMask: [.borderless, .nonactivatingPanel, .resizable],
@@ -62,6 +58,9 @@ final class NotesPanel: NSPanel {
         hasShadow = false
         ignoresMouseEvents = (mode == .recording)
         contentView = backgroundView
+        content.frame = backgroundView.bounds.insetBy(dx: Self.padding, dy: Self.padding)
+        content.autoresizingMask = [.width, .height]
+        backgroundView.addSubview(content)
     }
 
     /// Only edit mode may take keyboard focus; borderless panels refuse it by default.
@@ -93,17 +92,24 @@ final class NotesPanel: NSPanel {
         }
     }
 
-    /// Builds the rounded dark background with `text` inset by `padding`.
-    ///
-    /// Shared with `CaptureTestWindow` so the positive control is styled like the notes; callers
-    /// choose the text, which is how the test window is kept from ever showing the notes.
-    static func makeContent(text: String, settings: Settings) -> (NSView, NSTextField) {
+    /// The rounded dark background, at `settings`' opacity, shared by the notes panel and the
+    /// capture test window so the positive control looks like the thing it checks.
+    static func makeBackground(settings: Settings) -> NSView {
         let background = NSView()
         background.wantsLayer = true
         let layer = background.layer
         layer?.backgroundColor = NSColor.black.withAlphaComponent(settings.opacity).cgColor
         layer?.cornerRadius = cornerRadius
         layer?.masksToBounds = true
+        return background
+    }
+
+    /// Builds the rounded dark background with `text` inset by `padding`.
+    ///
+    /// Used only by `CaptureTestWindow`, which passes its fixed test text: that is how the
+    /// recordable test window is kept from ever showing the notes.
+    static func makeContent(text: String, settings: Settings) -> (NSView, NSTextField) {
+        let background = makeBackground(settings: settings)
 
         let label = NSTextField(wrappingLabelWithString: text)
         label.textColor = .white

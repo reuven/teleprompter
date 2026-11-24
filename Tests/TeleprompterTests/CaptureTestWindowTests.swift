@@ -68,5 +68,5 @@ private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
         w.textLabel.stringValue
             == "TEST — this red box SHOULD appear in your recording. Your notes (above) should not."
     )
-    #expect(w.textLabel.stringValue != NotesPanel.sampleText)
+    #expect(!(w.contentView?.subviews.contains { $0 is NotesContentView } ?? true))
 }

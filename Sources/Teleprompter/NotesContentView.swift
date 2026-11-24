@@ -1,0 +1,205 @@
+import AppKit
+import TeleprompterCore
+
+/// The notes themselves, inside the panel: an editor for the Markdown source in edit mode, and the
+/// rendered notes, shrunk to fit, in recording mode.
+///
+/// Why one view with two children: the panel's frame, background and hiding never change with
+/// the mode, only what is drawn inside it, so switching is just showing one child and hiding the
+/// other. Every recording-mode decision comes from `RecordingLayout`; this view only copies the
+/// result to screen and decides *when* to refit (on resize, text, or maximum-size changes).
+///
+/// The reader is laid out with no inset and no line-fragment padding, so the box measured by
+/// the fitter is exactly the box the text is drawn in; otherwise "fits" could still clip.
+@MainActor
+final class NotesContentView: NSView, NSTextViewDelegate {
+    /// The model: the editor writes to it, and both children show its text.
+    let store: NotesStore
+    /// Edit mode's text view, raw Markdown in a fixed-size monospaced font.
+    let editor: NSTextView
+    /// Scrolls the editor; long notes scroll rather than shrink while typing.
+    let editorScrollView: NSScrollView
+    /// Recording mode's view: the rendered notes, not editable or selectable.
+    let reader: NSTextView
+    // The reader's TextKit 1 stack, built by hand so the container is never optional and the
+    // storage (which owns the layout manager) is kept alive by this view.
+    private let readerStorage = NSTextStorage()
+    private let readerContainer = NSTextContainer()
+    /// "▼ more below", pinned to the bottom edge when notes overflow even at the floor size.
+    let badge = NSTextField(labelWithString: RecordingLayout.moreBelowText)
+
+    /// The size passed to the fitter by the last fit, or nil if nothing has been fitted yet.
+    private(set) var fittedSize: CGSize?
+    /// The font size chosen by the last fit, or nil if nothing has been fitted yet.
+    private(set) var fittedFontSize: Double?
+    // What the last fit was computed from; a fit is redone only when one of these changes.
+    private var fittedText: String?
+    private var fittedMax: Double?
+    // Whether the last fit overflowed; kept so returning to recording restores the badge.
+    private var fittedOverflows = false
+
+    /// The user's font size: the editor is sized from it and every fit starts from it, so changing
+    /// it (Larger/Smaller Text) refits at once.
+    var maxFontSize: Double {
+        didSet {
+            editor.font = EditorStyle.font(forMaxFontSize: maxFontSize)
+            refit()
+        }
+    }
+
+    /// Which child is shown. Entering edit focuses the editor; entering recording refits, so what
+    /// was just typed is what is shown.
+    var mode: Mode {
+        didSet { showMode() }
+    }
+
+    /// Builds both children around `store`'s current text and shows the one for `mode`.
+    init(store: NotesStore, maxFontSize: Double, mode: Mode, frame: CGRect) {
+        self.store = store
+        self.maxFontSize = maxFontSize
+        self.mode = mode
+        editorScrollView = NSTextView.scrollableTextView()
+        // scrollableTextView() always supplies an NSTextView document view.
+        editor = editorScrollView.documentView as! NSTextView
+        let layoutManager = NSLayoutManager()
+        readerStorage.addLayoutManager(layoutManager)
+        layoutManager.addTextContainer(readerContainer)
+        reader = NSTextView(frame: .zero, textContainer: readerContainer)
+        super.init(frame: frame)
+
+        configureEditor()
+        configureReader()
+        configureBadge()
+        showMode()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// The box the reader draws text in: its bounds minus the container inset and line-fragment
+    /// padding (both zero, but subtracted anyway so the two can't drift apart).
+    var drawableSize: CGSize {
+        let inset = reader.textContainerInset
+        let padding = readerContainer.lineFragmentPadding
+        return CGSize(
+            width: reader.bounds.width - 2 * inset.width - 2 * padding,
+            height: reader.bounds.height - 2 * inset.height)
+    }
+
+    /// Refits after a resize: the window got bigger or smaller, so the best size changed too.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        refit()
+    }
+
+    /// Call when the store's text changed from outside the app (another editor saved the file):
+    /// re-renders at once in either mode, and updates the editor only if its text differs, keeping
+    /// the selection where the text still allows it.
+    func notesChanged() {
+        if editor.string != store.text {
+            let length = (store.text as NSString).length
+            let selection = editor.selectedRanges.map { value in
+                let range = value.rangeValue
+                let start = min(range.location, length)
+                return NSValue(
+                    range: NSRange(location: start, length: min(range.length, length - start)))
+            }
+            editor.string = store.text
+            editor.selectedRanges = selection
+        }
+        refit()
+    }
+
+    /// Sends each edit to the store, which saves it after a short pause.
+    func textDidChange(_ notification: Notification) {
+        store.userEdited(editor.string)
+    }
+
+    private func configureEditor() {
+        editorScrollView.frame = bounds
+        editorScrollView.autoresizingMask = [.width, .height]
+        editorScrollView.drawsBackground = false
+        editorScrollView.hasVerticalScroller = true
+        editorScrollView.scrollerStyle = .overlay
+        editor.delegate = self
+        // Markdown source: no styling, and none of the substitutions that would corrupt it.
+        editor.isRichText = false
+        editor.importsGraphics = false
+        editor.allowsUndo = true
+        editor.isAutomaticQuoteSubstitutionEnabled = false
+        editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticTextReplacementEnabled = false
+        editor.isAutomaticSpellingCorrectionEnabled = false
+        editor.isAutomaticLinkDetectionEnabled = false
+        editor.isAutomaticDataDetectionEnabled = false
+        editor.isAutomaticTextCompletionEnabled = false
+        editor.smartInsertDeleteEnabled = false
+        editor.drawsBackground = false
+        editor.textColor = .white
+        editor.insertionPointColor = .white
+        editor.font = EditorStyle.font(forMaxFontSize: maxFontSize)
+        editor.string = store.text
+        addSubview(editorScrollView)
+    }
+
+    private func configureReader() {
+        reader.isEditable = false
+        reader.isSelectable = false
+        reader.drawsBackground = false
+        // A fixed-size view: the default (grow to fit the text) would make the measured box and
+        // the drawn box differ.
+        reader.isVerticallyResizable = false
+        reader.isHorizontallyResizable = false
+        reader.textContainerInset = .zero
+        readerContainer.lineFragmentPadding = 0
+        // Width follows the view; height is unlimited so layout never stops early. The view clips
+        // what doesn't fit, and the badge says so.
+        readerContainer.size = CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
+        readerContainer.widthTracksTextView = true
+        reader.frame = bounds
+        reader.autoresizingMask = [.width, .height]
+        addSubview(reader)
+    }
+
+    private func configureBadge() {
+        badge.font = .boldSystemFont(ofSize: 13)
+        badge.textColor = .white
+        badge.drawsBackground = true
+        badge.backgroundColor = NSColor.black.withAlphaComponent(0.7)
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(badge)
+        NSLayoutConstraint.activate([
+            badge.centerXAnchor.constraint(equalTo: centerXAnchor),
+            badge.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    private func showMode() {
+        let editing = mode == .edit
+        editorScrollView.isHidden = !editing
+        reader.isHidden = editing
+        if editing {
+            badge.isHidden = true
+            window?.makeFirstResponder(editor)
+        } else {
+            refit()
+            badge.isHidden = !fittedOverflows
+        }
+    }
+
+    /// Fits and renders the notes for the reader, from `maxFontSize` every time (never from the
+    /// last fitted size), so text grows back as well as shrinks. Does nothing while editing, and
+    /// skips the work when nothing it depends on has changed.
+    private func refit() {
+        guard mode == .recording else { return }
+        let size = drawableSize
+        let text = store.text
+        guard size != fittedSize || text != fittedText || maxFontSize != fittedMax else { return }
+        let layout = RecordingLayout(text, maxFontSize: maxFontSize, in: size)
+        readerStorage.setAttributedString(layout.text)
+        (fittedSize, fittedText, fittedMax) = (size, text, maxFontSize)
+        fittedFontSize = layout.fontSize
+        fittedOverflows = layout.showsMoreBelow
+        badge.isHidden = !layout.showsMoreBelow
+    }
+}
