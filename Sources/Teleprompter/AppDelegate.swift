@@ -24,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusMenu: StatusMenu?
     // The recordable positive control; non-nil only while Show in Recordings (Test) is on.
     private var testWindow: CaptureTestWindow?
+    // Every test window created this session, by number. A just-closed one can still be listed as
+    // on screen when the check runs right after a toggle, and it's recordable by design, so the
+    // stray-window check exempts it by identity rather than raising a false warning.
+    private var testWindowNumbers: Set<Int> = []
     // The app the user was in when edit mode began; Lock for Recording hands focus back to it.
     private var appBeforeEdit: NSRunningApplication?
 
@@ -154,6 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let window = CaptureTestWindow(near: panel.frame, within: visibleFrame(of: panel))
             window.orderFrontRegardless()
             testWindow = window
+            testWindowNumbers.insert(window.windowNumber)
         } else if !modeState.captureVisible {
             testWindow?.close()
             testWindow = nil
@@ -171,8 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let statusItemWindow = statusMenu?.statusItemWindow
         CaptureShield.apply(to: NSApp.windows, statusItemWindow: statusItemWindow)
         let state = windowServerSharingState(windowNumber: panel.windowNumber)
-        let allowed = Set(
-            [testWindow?.windowNumber, statusItemWindow?.windowNumber].compactMap { $0 })
+        let allowed = testWindowNumbers.union([statusItemWindow?.windowNumber].compactMap { $0 })
         let warning =
             captureWarning(sharingState: state)
             ?? strayWindowWarning(windowServerWindows(ownedBy: getpid()), allowed: allowed)
