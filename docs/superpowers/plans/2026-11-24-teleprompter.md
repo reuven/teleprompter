@@ -518,15 +518,15 @@ Run `testslot -- swift test --filter NotesPanelTests`. Expected: FAIL (`NotesPan
   - `final class HotKey { init?(keyCode: UInt32, modifiers: UInt32, handler: @escaping () -> Void) }`. Returns nil if registration fails; the menu then shows "Shortcut unavailable".
   - The toggle (hotkey or menu): `modeState.toggleMode()`, then the panel's mode, then `panel.setCaptureVisible(false)`, then the content view's mode. Entering edit makes the panel key. Leaving edit calls `makeFirstResponder(nil)`, resigns key, and does `previousApp?.activate()` if the app ever became active.
 
-- [ ] **Step 1:** Create a branch: `feat/views-hotkey`.
-- [ ] **Step 2:** Implement per the Interfaces block. The launch mode is `ModeState.initial(hasNotes: !store.text.isEmpty)`.
+- [x] **Step 1:** Create a branch: `feat/views-hotkey`.
+- [x] **Step 2:** Implement per the Interfaces block. The launch mode is `ModeState.initial(hasNotes: !store.text.isEmpty)`.
 - [ ] **Step 3:** Build and run. Manually check:
   1. Type Markdown in edit mode.
   2. Press ⌃⌥⌘N from Safari. Expected: the rendered view appears, and Safari keeps focus and keeps receiving typing.
   3. Click through the panel onto Safari content. Expected: Safari gets the click.
   4. Shrink the window. Expected: the text shrinks; at the floor, the badge appears.
   5. Press ⌃⌥⌘N again. Expected: you can type in the panel.
-- [ ] **Step 4:** Run coverage and lint. Commit ("Add edit/recording views and global hotkey"), push, merge, delete the branch.
+- [x] **Step 4:** Run coverage and lint. Commit ("Add edit/recording views and global hotkey"), push, merge, delete the branch.
 
 ---
 

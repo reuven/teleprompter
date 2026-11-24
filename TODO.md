@@ -20,8 +20,8 @@ Design: [`docs/superpowers/specs/2026-11-24-teleprompter-design.md`](docs/superp
 - [x] 7. Notes store (scratch, open file, save-back, reload; never overwrites what it can't read)
 - [x] 7b. Mutation testing on Core — Muter 82% (29/35, measured; scope in `docs/mutation-testing.md`) + manual MarkdownRenderer spot-check
 - [x] 8. App shell + ScreenFlow checkpoint — **passed 2026-11-24**: notes panel hidden, red control box recorded (keyboard check still open → Task 9)
-- [ ] 9. Edit/recording views, global hotkey ⌃⌥⌘N — *in progress*
-- [ ] 10. File menu, appearance, persistence wiring
+- [x] 9. Edit/recording views, global hotkey ⌃⌥⌘N, CaptureShield (all helper windows hidden) — merged; **hands-on check with Reuven pending**
+- [ ] 10. File menu, appearance, persistence wiring — *in progress*
 - [ ] 11. Release v0.1.0 (manual checklist, README, tag, GitHub release)
 
 ## Wrap-up
