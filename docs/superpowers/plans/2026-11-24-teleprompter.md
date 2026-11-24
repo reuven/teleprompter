@@ -370,8 +370,8 @@ Properties (Review Focus #5), with `count: 50` because each check renders text:
   - On `.delete` or `.rename`: cancel the source, then reopen the *path* after a short retry (up to 10 × 50 ms) and call `onChange`. This is what survives atomic replace.
   - If the file never comes back, stop silently. `NotesStore` detects the missing file.
 
-- [ ] **Step 1:** Create a branch: `feat/watcher`.
-- [ ] **Step 2: Write failing tests.** Use a temp directory, and `confirmation(expectedCount:)` or an `AsyncStream` with a 2 s timeout.
+- [x] **Step 1:** Create a branch: `feat/watcher`.
+- [x] **Step 2: Write failing tests.** Use a temp directory, and `confirmation(expectedCount:)` or an `AsyncStream` with a 2 s timeout.
 
 ```swift
 @Test func firesOnInPlaceWrite() async throws        // FileHandle append → ≥1 change
@@ -383,10 +383,10 @@ Properties (Review Focus #5), with `count: 50` because each check renders text:
 @Test func deletedFileDoesNotCrash() async throws     // delete file, wait 1 s, watcher idle, no crash
 ```
 
-- [ ] **Step 3:** Run `testslot -- swift test --filter FileWatcherTests`. Expected: FAIL.
-- [ ] **Step 4:** Implement `FileWatcher.swift`.
-- [ ] **Step 5:** Run the tests 3 times in a row to catch flakiness, then `scripts/coverage.sh`. Expected: all PASS.
-- [ ] **Step 6:** Lint, commit ("Add file watcher that survives atomic saves"), push, merge, delete the branch.
+- [x] **Step 3:** Run `testslot -- swift test --filter FileWatcherTests`. Expected: FAIL.
+- [x] **Step 4:** Implement `FileWatcher.swift`.
+- [x] **Step 5:** Run the tests 3 times in a row to catch flakiness, then `scripts/coverage.sh`. Expected: all PASS.
+- [x] **Step 6:** Lint, commit ("Add file watcher that survives atomic saves"), push, merge, delete the branch.
 
 ---
 
