@@ -81,9 +81,25 @@ private let mediumNotes = (1...8).map { "- point number \($0)" }.joined(separato
     let store = makeStore("same")
     let v = NotesContentView(store: store, maxFontSize: 32, mode: .edit, frame: frame)
     v.editor.setSelectedRange(NSRange(location: 1, length: 2))
-    v.editor.undoManager?.removeAllActions()
     v.notesChanged()
     #expect(v.editor.selectedRange() == NSRange(location: 1, length: 2))
+}
+
+@MainActor @Test func externalChangeClearsUndoSoItCantReplayStaleEdits() throws {
+    // Undo history describes edits to the old text; replaying it on the reloaded text would apply
+    // them at the wrong places. In a window, so the editor has an undo manager.
+    let store = makeStore("abc")
+    let v = NotesContentView(store: store, maxFontSize: 32, mode: .edit, frame: frame)
+    let panel = NotesPanel(settings: Settings(), content: v)
+    let undo = try #require(v.editor.undoManager)
+    v.editor.setSelectedRange(NSRange(location: 3, length: 0))
+    v.editor.insertText("d", replacementRange: NSRange(location: NSNotFound, length: 0))
+    v.editor.breakUndoCoalescing()
+    #expect(undo.canUndo && store.text == "abcd")
+    store.userEdited("reloaded")
+    v.notesChanged()
+    #expect(!undo.canUndo && v.editor.string == "reloaded")
+    withExtendedLifetime(panel) {}
 }
 
 @MainActor @Test func reallyExternalChangeReachesTheView() async throws {

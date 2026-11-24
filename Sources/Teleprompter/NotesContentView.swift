@@ -94,7 +94,7 @@ final class NotesContentView: NSView, NSTextViewDelegate {
 
     /// Call when the store's text changed from outside the app (another editor saved the file):
     /// re-renders at once in either mode, and updates the editor only if its text differs, keeping
-    /// the selection where the text still allows it.
+    /// the selection where the text still allows it and clearing undo.
     func notesChanged() {
         if editor.string != store.text {
             let length = (store.text as NSString).length
@@ -106,6 +106,9 @@ final class NotesContentView: NSView, NSTextViewDelegate {
             }
             editor.string = store.text
             editor.selectedRanges = selection
+            // The undo history describes edits to the old text; replaying it on the new text
+            // would apply them in the wrong places, so it goes.
+            editor.undoManager?.removeAllActions()
         }
         refit()
     }
