@@ -48,14 +48,23 @@ import Testing
     #expect(p.textLabel.font?.pointSize == 40 && p.textLabel.textColor == .white)
 }
 
-@MainActor @Test func applyingRecordingStateDropsFocusAndClicks() {
+@MainActor @Test func lockingReallyGivesUpKeyStatus() {
+    // On screen (far off to the side) so the panel can genuinely become key; the first expectation
+    // proves it did, so the second can't pass vacuously.
     let p = NotesPanel(settings: Settings())
+    p.setFrameOrigin(CGPoint(x: -20000, y: -20000))
+    p.orderFrontRegardless()
+    defer { p.orderOut(nil) }
     var state = ModeState.initial(hasNotes: false)
-    p.apply(state)
     state.toggleMode()
-    p.apply(state)
-    #expect(p.mode == .recording && p.ignoresMouseEvents && !p.isKeyWindow)
-    #expect(p.firstResponder === p && p.sharingType == .none)
+    p.apply(state)  // recording
+    state.toggleMode()
+    p.apply(state)  // edit
+    #expect(p.isKeyWindow)
+    state.toggleMode()
+    p.apply(state)  // recording
+    #expect(!p.isKeyWindow && p.isVisible)
+    #expect(p.mode == .recording && p.ignoresMouseEvents && p.firstResponder === p)
 }
 
 @MainActor @Test func modeMenuTitleOffersTheOtherMode() {
@@ -73,6 +82,10 @@ import Testing
     #expect(p.mode == .edit && !p.ignoresMouseEvents && p.canBecomeKey)
 }
 
+/// Guards against app code writing `sharingType` on a mode switch. It cannot catch the macOS 26.5
+/// behavior where a LaunchServices-launched app's return to `.none` is ignored (this test process
+/// isn't launched that way, and AppKit's getter lies there anyway); only the runtime window-server
+/// self-check in `CaptureCheck.swift` covers that.
 @MainActor @Test func panelStaysHiddenThroughModeSwitches() {
     let p = NotesPanel(settings: Settings())
     var state = ModeState.initial(hasNotes: true)

@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusMenu: StatusMenu?
     // The recordable positive control; non-nil only while Show in Recordings (Test) is on.
     private var testWindow: CaptureTestWindow?
+    // The app the user was in when edit mode began; Lock for Recording hands focus back to it.
+    private var appBeforeEdit: NSRunningApplication?
 
     /// Builds the panel and menu once AppKit is ready, places the panel, and shows it without
     /// activating the app, so launching never steals focus from the app being recorded.
@@ -39,22 +41,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         checkPanelHidden()
     }
 
-    /// Remembers the new position so the panel reopens where the user left it.
-    func windowDidMove(_ notification: Notification) { saveFrame() }
+    /// Remembers the new position so the panel reopens where the user left it, and keeps the
+    /// capture test box beside it.
+    func windowDidMove(_ notification: Notification) { panelFrameChanged() }
 
-    /// Remembers the new size so the panel reopens at the size the user chose.
-    func windowDidResize(_ notification: Notification) { saveFrame() }
+    /// Remembers the new size so the panel reopens at the size the user chose, and keeps the
+    /// capture test box beside it.
+    func windowDidResize(_ notification: Notification) { panelFrameChanged() }
 
-    private func saveFrame() {
+    private func panelFrameChanged() {
         guard let panel else { return }
         settings.windowFrame = panel.frame
         settingsStore.save(settings)
+        testWindow?.follow(panel.frame, within: visibleFrame(of: panel))
+    }
+
+    // The panel's screen, so the test box lands on the same display; falls back to the main one.
+    private func visibleFrame(of panel: NotesPanel) -> CGRect {
+        panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? panel.frame
     }
 
     // ModeState decides (toggling mode also clears the capture check); panel and menu follow.
     private func toggleMode() {
         modeState.toggleMode()
+        if modeState.mode == .edit {
+            let front = NSWorkspace.shared.frontmostApplication
+            appBeforeEdit = front == NSRunningApplication.current ? nil : front
+        }
         syncToState()
+        if modeState.mode == .recording {
+            // The non-activating panel normally leaves our app inactive; if something activated it
+            // anyway, hand focus back so typing reaches the app being recorded.
+            if NSApp.isActive { appBeforeEdit?.activate() }
+            appBeforeEdit = nil
+        }
         checkPanelHidden()
     }
 
@@ -73,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // recordable window is never reused or left on screen.
     private func syncTestWindow() {
         if modeState.captureVisible, testWindow == nil, let panel {
-            let window = CaptureTestWindow(below: panel.frame)
+            let window = CaptureTestWindow(near: panel.frame, within: visibleFrame(of: panel))
             window.orderFrontRegardless()
             testWindow = window
         } else if !modeState.captureVisible {

@@ -17,7 +17,7 @@ final class NotesPanel: NSPanel {
     static let sampleText = """
         Teleprompter — sample notes
         • This window should NOT appear in your recording
-        • Menu-bar icon › Show in Recordings (Test) shows a red copy that SHOULD appear
+        • Menu-bar icon › Show in Recordings (Test) shows a red test box that SHOULD appear
         """
 
     /// Corner radius of the dark background, in points.
@@ -74,8 +74,10 @@ final class NotesPanel: NSPanel {
     ///
     /// Why one entry point: a mode change must also move focus, and doing both together means no
     /// caller can leave the panel half-switched. Entering edit takes key focus so typing reaches
-    /// the panel; leaving it drops first responder and key status so keystrokes return to the app
-    /// being recorded. Capture visibility is deliberately not applied here (see the type docs).
+    /// the panel; leaving it drops first responder and really gives up key status by ordering
+    /// the panel out and straight back in (`resignKey()` is a notification hook, documented as not
+    /// to be called directly, and AppKit doesn't recheck `canBecomeKey` when it turns false).
+    /// Capture visibility is deliberately not applied here (see the type docs).
     func apply(_ state: ModeState) {
         let entering = state.mode != mode
         mode = state.mode
@@ -84,7 +86,10 @@ final class NotesPanel: NSPanel {
             makeKey()
         } else {
             makeFirstResponder(nil)
-            resignKey()
+            if isVisible {
+                orderOut(nil)
+                orderFrontRegardless()
+            }
         }
     }
 
