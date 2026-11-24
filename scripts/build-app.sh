@@ -20,9 +20,12 @@ version="${version:-0.1.0}"
 build="$(git rev-list --count HEAD)"
 app="build/Teleprompter.app"
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/Teleprompter"
 cp scripts/Info.plist "$app/Contents/Info.plist"
+# The binary statically links swift-markdown and swift-cmark, whose licenses require their notices
+# to travel with it.
+cp THIRD_PARTY_NOTICES.md "$app/Contents/Resources/THIRD_PARTY_NOTICES.md"
 plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$build" "$app/Contents/Info.plist"
 

@@ -10,8 +10,10 @@ Requires macOS 26 or later. MIT licensed.
 ## Install
 
 1. Download `Teleprompter-<version>.zip` from the
-   [Releases page](https://github.com/reuven/teleprompter/releases) and unzip it.
-2. Move `Teleprompter.app` to `/Applications`.
+   [Releases page](https://github.com/reuven/teleprompter/releases) and unzip it. You get a
+   `Teleprompter-<version>` folder holding `Teleprompter.app`, `LICENSE`, and
+   `THIRD_PARTY_NOTICES.md`.
+2. Move `Teleprompter.app` from that folder to `/Applications`.
 3. The app is ad-hoc signed, not notarized, so macOS blocks the first open. Open it once,
    then go to System Settings › Privacy & Security, scroll down, and click **Open Anyway**.
 
@@ -96,6 +98,14 @@ swift format lint --strict -r Sources Tests
 - Before a release, run [`docs/manual-checklist.md`](docs/manual-checklist.md); it covers what
   tests cannot (ScreenFlow, focus, second displays).
 - Design: [`docs/superpowers/specs/2026-11-24-teleprompter-design.md`](docs/superpowers/specs/2026-11-24-teleprompter-design.md).
+
+## Acknowledgments
+
+Markdown is parsed with [swift-markdown](https://github.com/swiftlang/swift-markdown) (Apache
+License 2.0) and [swift-cmark](https://github.com/swiftlang/swift-cmark), Apple's fork of
+cmark-gfm (BSD-2-Clause and others). Their license texts are in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), which also ships inside the app and in the
+release zip.
 
 ## License
 
