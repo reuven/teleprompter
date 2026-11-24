@@ -31,6 +31,9 @@ for f in Sources/TeleprompterCore/*.swift; do
   [[ "$f" == *MarkdownRenderer.swift ]] || files+=(--files-to-mutate "$f")
 done
 
+# Muter copies the project to a sibling directory named <name>_mutated and a leftover one
+# from an earlier run could be stale, so start each run from a fresh copy. Only that exact
+# sibling path (guarded by basename) is deleted.
 rm -rf "$ROOT/../$(basename "$ROOT")_mutated"
 mkdir -p muter_logs
 ~/.local/bin/testslot -- muter run --skip-update-check -f json -o muter_logs/muter-report.json \
