@@ -97,20 +97,35 @@ final class NotesContentView: NSView, NSTextViewDelegate {
     /// the selection where the text still allows it and clearing undo.
     func notesChanged() {
         if editor.string != store.text {
-            let length = (store.text as NSString).length
-            let selection = editor.selectedRanges.map { value in
-                let range = value.rangeValue
-                let start = min(range.location, length)
-                return NSValue(
-                    range: NSRange(location: start, length: min(range.length, length - start)))
-            }
+            let selection = Self.clampedSelection(
+                editor.selectedRanges.map(\.rangeValue), to: store.text)
             editor.string = store.text
-            editor.selectedRanges = selection
+            editor.selectedRanges = selection.map { NSValue(range: $0) }
             // The undo history describes edits to the old text; replaying it on the new text
             // would apply them in the wrong places, so it goes.
             editor.undoManager?.removeAllActions()
         }
         refit()
+    }
+
+    /// Fits selection `ranges` from the old text into `text`: each is cut off at the end and widened
+    /// to whole characters (a range never splits an emoji or other multi-unit character), and a
+    /// caret inside a character moves to its start.
+    ///
+    /// Why: after another program changes the file, the old selection may point past the end or
+    /// into the middle of a surrogate pair, and typing there would corrupt the character.
+    static func clampedSelection(_ ranges: [NSRange], to text: String) -> [NSRange] {
+        let ns = text as NSString
+        return ranges.map { range in
+            let start = min(range.location, ns.length)
+            let clamped = NSRange(location: start, length: min(range.length, ns.length - start))
+            guard clamped.length == 0 else {
+                return ns.rangeOfComposedCharacterSequences(for: clamped)
+            }
+            guard start < ns.length else { return clamped }
+            return NSRange(
+                location: ns.rangeOfComposedCharacterSequence(at: start).location, length: 0)
+        }
     }
 
     /// Sends each edit to the store, which saves it after a short pause.

@@ -119,6 +119,56 @@ private let mediumNotes = (1...8).map { "- point number \($0)" }.joined(separato
     #expect(v.editor.string == "hi" && v.editor.selectedRange() == NSRange(location: 2, length: 0))
 }
 
+// The clamp itself, without relying on NSTextView also snapping selections (it does today, but
+// that isn't documented).
+@MainActor @Test func clampKeepsRangesThatStillFit() {
+    #expect(
+        NotesContentView.clampedSelection([NSRange(location: 1, length: 2)], to: "hello")
+            == [NSRange(location: 1, length: 2)])
+}
+
+@MainActor @Test func clampShortensRangesPastTheEnd() {
+    #expect(
+        NotesContentView.clampedSelection([NSRange(location: 3, length: 9)], to: "hello")
+            == [NSRange(location: 3, length: 2)])
+    #expect(
+        NotesContentView.clampedSelection([NSRange(location: 8, length: 3)], to: "hi")
+            == [NSRange(location: 2, length: 0)])
+}
+
+@MainActor @Test func clampWidensToWholeEmojiAndSnapsCaretsToTheirStart() {
+    // "a😀😀" is 5 UTF-16 units: a, then surrogate pairs at 1–2 and 3–4.
+    #expect(
+        NotesContentView.clampedSelection([NSRange(location: 2, length: 2)], to: "a😀😀")
+            == [NSRange(location: 1, length: 4)])
+    #expect(
+        NotesContentView.clampedSelection([NSRange(location: 2, length: 0)], to: "a😀")
+            == [NSRange(location: 1, length: 0)])
+    // A family emoji is one character of 11 units; a caret inside it moves to its start.
+    #expect(
+        NotesContentView.clampedSelection([NSRange(location: 5, length: 0)], to: "x👨‍👩‍👧‍👦")
+            == [NSRange(location: 1, length: 0)])
+}
+
+@MainActor @Test func clampedSelectionNeverSplitsAnEmoji() {
+    // "a😀😀" is 5 UTF-16 units: a, then two surrogate pairs at 1–2 and 3–4.
+    let store = makeStore("abcdef")
+    let v = NotesContentView(store: store, maxFontSize: 32, mode: .edit, frame: frame)
+    v.editor.setSelectedRange(NSRange(location: 2, length: 2))  // would cover half of each emoji
+    store.userEdited("a😀😀")
+    v.notesChanged()
+    #expect(v.editor.selectedRange() == NSRange(location: 1, length: 4))
+}
+
+@MainActor @Test func clampedCaretNeverLandsInsideAnEmoji() {
+    let store = makeStore("abc")
+    let v = NotesContentView(store: store, maxFontSize: 32, mode: .edit, frame: frame)
+    v.editor.setSelectedRange(NSRange(location: 2, length: 0))  // would sit between a surrogate pair
+    store.userEdited("a😀")
+    v.notesChanged()
+    #expect(v.editor.selectedRange() == NSRange(location: 1, length: 0))
+}
+
 @MainActor @Test func unchangedTextLeavesTheEditorAlone() {
     let store = makeStore("same")
     let v = NotesContentView(store: store, maxFontSize: 32, mode: .edit, frame: frame)
