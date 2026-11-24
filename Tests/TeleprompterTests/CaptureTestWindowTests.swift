@@ -3,6 +3,11 @@ import Testing
 
 @testable import Teleprompter
 
+/// Every view below `view`, at any depth, so a notes view nested anywhere would be found.
+@MainActor private func descendants(of view: NSView) -> [NSView] {
+    view.subviews + view.subviews.flatMap { descendants(of: $0) }
+}
+
 /// A 1440×875 visible area, like a laptop screen below the menu bar.
 private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
 
@@ -62,11 +67,12 @@ private let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
     #expect(w.warningLabel.stringValue == "VISIBLE TO RECORDING" && !w.warningLabel.isHidden)
 }
 
-@MainActor @Test func testWindowShowsOnlyFixedTestText() {
+@MainActor @Test func testWindowShowsOnlyFixedTestText() throws {
     let w = CaptureTestWindow(near: .zero, within: screen)
     #expect(
         w.textLabel.stringValue
             == "TEST — this red box SHOULD appear in your recording. Your notes (above) should not."
     )
-    #expect(!(w.contentView?.subviews.contains { $0 is NotesContentView } ?? true))
+    let content = try #require(w.contentView)
+    #expect(!descendants(of: content).contains { $0 is NotesContentView || $0 is NSTextView })
 }

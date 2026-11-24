@@ -7,6 +7,11 @@ import Carbon.HIToolbox
 /// pressing it while recording in another app never types into that app. NSEvent's global
 /// monitors can only observe, and need permission.
 ///
+/// Key codes are physical key positions, not characters: the app's ⌃⌥⌘N uses `kVK_ANSI_N`, the
+/// key where N sits on a US (ANSI) keyboard. On other layouts the same physical key is used
+/// whatever it's labeled (on Dvorak, the key that types B), so the shortcut stays in one place
+/// under the fingers but may not match the letter printed on it.
+///
 /// The registration lives exactly as long as the object: releasing it unregisters the shortcut.
 /// The failable initializer returns nil when the system refuses the combination (usually because
 /// another app owns it), so the caller can tell the user instead of failing silently.

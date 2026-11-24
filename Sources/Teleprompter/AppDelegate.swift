@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         checkPanelHidden()
 
         // The same path as the menu item, so the shortcut can never do anything the menu doesn't.
+        // kVK_ANSI_N is a physical key position (see HotKey), not the letter N on every layout.
         hotKey = HotKey(
             keyCode: UInt32(kVK_ANSI_N), modifiers: UInt32(controlKey | optionKey | cmdKey)
         ) { [weak self] in self?.toggleMode() }
