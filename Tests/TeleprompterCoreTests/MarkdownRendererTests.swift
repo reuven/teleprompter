@@ -126,4 +126,23 @@ private func paragraphStyle(_ s: NSAttributedString, _ substring: String) -> NSP
         #expect(paragraphStyle(r, "b").headIndent == 2 * 1.2 * 40)
         #expect(paragraphStyle(r, "b").paragraphSpacing == 16)
     }
+
+    @Test func inlineCodeKeepsBoldInHeadingAndStrong() {
+        let h = MarkdownRenderer.render("# Run `ls`", style: style)
+        let ht = fontAt(h, "ls").fontDescriptor.symbolicTraits
+        #expect(ht.contains(.monoSpace) && ht.contains(.bold))
+        let s = MarkdownRenderer.render("**`x`**", style: style)
+        let st = fontAt(s, "x").fontDescriptor.symbolicTraits
+        #expect(st.contains(.monoSpace) && st.contains(.bold))
+    }
+
+    @Test func onlyBulletLineIsOutdented() {
+        let a = MarkdownRenderer.render("- a\n\n  more", style: style)
+        #expect(paragraphStyle(a, "•").firstLineHeadIndent < paragraphStyle(a, "•").headIndent)
+        let more = paragraphStyle(a, "more")
+        #expect(more.firstLineHeadIndent == more.headIndent)
+        let b = MarkdownRenderer.render("- line one  \nline two", style: style)
+        let two = paragraphStyle(b, "line two")
+        #expect(two.firstLineHeadIndent == two.headIndent && two.headIndent > 0)
+    }
 }

@@ -49,24 +49,31 @@ private struct AttributedStringBuilder: MarkupWalker {
         paragraph = Self.makeParagraphStyle(style: style, depth: 0)
     }
 
-    private static func makeParagraphStyle(style: NoteStyle, depth: Int) -> NSParagraphStyle {
+    private static func makeParagraphStyle(style: NoteStyle, depth: Int, outdent: Bool = false)
+        -> NSParagraphStyle
+    {
         let indent = Double(depth) * 1.2 * style.fontSize
         let p = NSMutableParagraphStyle()
         p.paragraphSpacing = 0.4 * style.fontSize
         p.headIndent = indent
-        p.firstLineHeadIndent = max(0, indent - 1.2 * style.fontSize)
+        // Only the line carrying a bullet/number hangs left; all others align with the text.
+        p.firstLineHeadIndent = outdent ? max(0, indent - 1.2 * style.fontSize) : indent
         p.tabStops = [NSTextTab(textAlignment: .left, location: indent)]
         return p
     }
 
     private var font: NSFont {
         let size = style.fontSize * headingScale
-        let base = NSFont.systemFont(ofSize: size)
-        if monospaced { return NSFont.monospacedSystemFont(ofSize: size, weight: .regular) }
+        let base =
+            monospaced
+            ? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+            : NSFont.systemFont(ofSize: size)
         guard !traits.isEmpty else { return base }
         let descriptor = base.fontDescriptor.withSymbolicTraits(
             base.fontDescriptor.symbolicTraits.union(traits))
-        // Falls back to the plain font if the traits can't be applied (never empty: `base`).
+        // Falls back to the untraited `base` if the traits can't be applied. Written as an
+        // array lookup because a `?? base` autoclosure is an unreachable region that
+        // fails the 100% gate.
         return [NSFont(descriptor: descriptor, size: size), base].compactMap { $0 }[0]
     }
 
@@ -86,10 +93,10 @@ private struct AttributedStringBuilder: MarkupWalker {
         result.append(NSAttributedString(string: "\n", attributes: last))
     }
 
-    private mutating func block(depth: Int, _ body: (inout Self) -> Void) {
+    private mutating func block(depth: Int, outdent: Bool = false, _ body: (inout Self) -> Void) {
         startBlock()
         let saved = paragraph
-        paragraph = Self.makeParagraphStyle(style: style, depth: depth)
+        paragraph = Self.makeParagraphStyle(style: style, depth: depth, outdent: outdent)
         body(&self)
         paragraph = saved
     }
@@ -120,8 +127,9 @@ private struct AttributedStringBuilder: MarkupWalker {
         let marker =
             (node.parent as? OrderedList).map { "\($0.startIndex + UInt(node.indexInParent))." }
             ?? "•"
-        block(depth: depth) {
+        block(depth: depth, outdent: true) {
             $0.append(marker + "\t")
+            $0.paragraph = Self.makeParagraphStyle(style: $0.style, depth: depth)
             $0.descendInto(node)
         }
     }
