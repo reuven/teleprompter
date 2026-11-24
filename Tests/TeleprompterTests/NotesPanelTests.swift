@@ -233,7 +233,8 @@ import Testing
 
 @MainActor @Test func editingActionTable() {
     #expect(NotesPanel.editingAction(for: key("c")) == #selector(NSText.copy(_:)))
-    #expect(NotesPanel.editingAction(for: key("Z", [.command, .shift])) == #selector(EditSpy.redo(_:)))
+    #expect(
+        NotesPanel.editingAction(for: key("Z", [.command, .shift])) == #selector(EditSpy.redo(_:)))
     #expect(NotesPanel.editingAction(for: key("c", [.command, .shift])) == nil)
     #expect(NotesPanel.editingAction(for: key("q")) == nil)
     #expect(NotesPanel.editingAction(for: key("c", [])) == nil)
