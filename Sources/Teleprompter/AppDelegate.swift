@@ -146,7 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func syncToState() {
-        panel?.apply(modeState)
+        // Toggles come from the user (menu or ⌃⌥⌘N), so entering edit takes focus.
+        panel?.apply(modeState, takeFocus: true)
         statusMenu?.update(from: modeState)
         syncTestWindow()
     }

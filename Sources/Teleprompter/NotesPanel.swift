@@ -78,9 +78,10 @@ final class NotesPanel: NSPanel {
     /// to be called directly, and AppKit doesn't recheck `canBecomeKey` when it turns false).
     /// Capture visibility is deliberately not applied here (see the type docs).
     ///
-    /// Pass `takeFocus: false` at launch: an empty-notes launch starts in edit mode, clickable,
-    /// but must not take keystrokes from the frontmost app; a click on the panel gives it focus.
-    func apply(_ state: ModeState, takeFocus: Bool = true) {
+    /// `takeFocus` has no default, so every caller decides: `false` at launch (an empty-notes
+    /// launch starts in edit mode, clickable, but must not take keystrokes from the frontmost
+    /// app; a click on the panel gives it focus), `true` for the user's own toggles.
+    func apply(_ state: ModeState, takeFocus: Bool) {
         let entering = state.mode != mode
         mode = state.mode
         guard entering else { return }

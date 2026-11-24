@@ -375,7 +375,7 @@ private let mediumNotes = (1...8).map { "- point number \($0)" }.joined(separato
         defer { panel.orderOut(nil) }
         var state = ModeState.initial(hasNotes: true)
         state.toggleMode()
-        panel.apply(state)
+        panel.apply(state, takeFocus: true)
         v.mode = .edit
         #expect(panel.firstResponder === v.editor)
     }

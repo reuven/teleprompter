@@ -60,12 +60,12 @@ import Testing
     defer { p.orderOut(nil) }
     var state = ModeState.initial(hasNotes: false)
     state.toggleMode()
-    p.apply(state)  // recording
+    p.apply(state, takeFocus: true)  // recording
     state.toggleMode()
-    p.apply(state)  // edit
+    p.apply(state, takeFocus: true)  // edit
     #expect(p.isKeyWindow)
     state.toggleMode()
-    p.apply(state)  // recording
+    p.apply(state, takeFocus: true)  // recording
     #expect(!p.isKeyWindow && p.isVisible)
     #expect(p.mode == .recording && p.ignoresMouseEvents && p.firstResponder === p)
 }
@@ -78,10 +78,10 @@ import Testing
 @MainActor @Test func applyingEditStateAcceptsInput() {
     let p = NotesPanel(settings: Settings())
     var state = ModeState.initial(hasNotes: true)
-    p.apply(state)
+    p.apply(state, takeFocus: true)
     #expect(p.mode == .recording && p.ignoresMouseEvents)
     state.toggleMode()
-    p.apply(state)
+    p.apply(state, takeFocus: true)
     #expect(p.mode == .edit && !p.ignoresMouseEvents && p.canBecomeKey)
 }
 
@@ -94,10 +94,10 @@ import Testing
     var state = ModeState.initial(hasNotes: true)
     for _ in 0..<4 {
         state.setCaptureVisible(true)
-        p.apply(state)
+        p.apply(state, takeFocus: true)
         #expect(p.sharingType == .none)
         state.toggleMode()
-        p.apply(state)
+        p.apply(state, takeFocus: true)
         #expect(p.sharingType == .none)
     }
 }
@@ -124,8 +124,8 @@ import Testing
     // vacuous.
     var toggled = state
     toggled.toggleMode()
-    p.apply(toggled)
+    p.apply(toggled, takeFocus: true)
     toggled.toggleMode()
-    p.apply(toggled)
+    p.apply(toggled, takeFocus: true)
     #expect(p.isKeyWindow)
 }
