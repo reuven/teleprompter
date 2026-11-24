@@ -83,7 +83,7 @@ private func contents(_ url: URL) throws -> String {
     @Test func scratchPersists() async {
         let store = makeStore()
         store.userEdited("a")
-        await store.flush()
+        store.flush()
         #expect(NotesStore(scratchURL: scratchURL).text == "a")
     }
 
@@ -101,8 +101,19 @@ private func contents(_ url: URL) throws -> String {
         let store = makeStore()
         store.open(file)
         store.userEdited("new")
-        await store.flush()
+        store.flush()
         #expect(try contents(file) == "new")
+    }
+
+    /// Synchronous so `applicationShouldTerminate` can save and answer at once, with no task or
+    /// `.terminateLater` in between.
+    @Test func flushSavesSynchronously() throws {
+        let file = try makeFile("old")
+        let store = makeStore(saveDelay: .seconds(30))
+        store.open(file)
+        store.userEdited("new")
+        store.flush()
+        #expect(try contents(file) == "new" && !store.hasUnsavedChanges)
     }
 
     @Test func externalChangeReloads() async throws {
@@ -129,7 +140,7 @@ private func contents(_ url: URL) throws -> String {
         store.open(link)
         #expect(store.source == .file(file), "the resolved file is the source")
         store.userEdited("new")
-        await store.flush()
+        store.flush()
         #expect(try contents(file) == "new")
         let type = try FileManager.default.attributesOfItem(atPath: link.path)[.type]
         #expect(type as? FileAttributeType == .typeSymbolicLink, "the link is still a link")
@@ -150,7 +161,7 @@ private func contents(_ url: URL) throws -> String {
         let store = makeStore()
         store.open(file)
         store.userEdited("mine")
-        await store.flush()
+        store.flush()
         try await Task.sleep(for: .milliseconds(300))
         #expect(changes.count == 0)
         #expect(store.text == "mine")
@@ -159,7 +170,7 @@ private func contents(_ url: URL) throws -> String {
     @Test func closeFileRestoresScratch() async throws {
         let store = makeStore()
         store.userEdited("s")
-        await store.flush()
+        store.flush()
         store.open(try makeFile("f"))
         #expect(store.text == "f")
         store.closeFile()
@@ -206,7 +217,7 @@ private func contents(_ url: URL) throws -> String {
         await propertyCheck(input: text) { s in
             let store = NotesStore(scratchURL: scratchURL, saveDelay: .milliseconds(10))
             store.userEdited(s)
-            await store.flush()
+            store.flush()
             #expect(
                 NotesStore(scratchURL: scratchURL).text.unicodeScalars.elementsEqual(
                     s.unicodeScalars))
@@ -217,7 +228,7 @@ private func contents(_ url: URL) throws -> String {
         for s in ["", "\r\n", "👩‍👩‍👧 🇮🇱", "שלום עולם", "e\u{301}", "a\u{0}b", "\u{FEFF}bom"] {
             let store = NotesStore(scratchURL: scratchURL, saveDelay: .milliseconds(10))
             store.userEdited(s)
-            await store.flush()
+            store.flush()
             #expect(
                 NotesStore(scratchURL: scratchURL).text.unicodeScalars.elementsEqual(
                     s.unicodeScalars),
@@ -245,7 +256,7 @@ private func contents(_ url: URL) throws -> String {
         store.userEdited("new")
         try await Task.sleep(for: .milliseconds(100))
         #expect(try contents(file) == "old")
-        await store.flush()
+        store.flush()
         #expect(try contents(file) == "new")
     }
 
@@ -270,7 +281,7 @@ private func contents(_ url: URL) throws -> String {
         let store = makeStore(saveDelay: .seconds(2))
         store.open(file)
         store.userEdited("first")
-        await store.flush()
+        store.flush()
         try await Task.sleep(for: .seconds(1))
         store.userEdited("second")
         try await Task.sleep(for: .milliseconds(1500))
@@ -294,7 +305,7 @@ private func contents(_ url: URL) throws -> String {
 
     @Test func flushWithNothingPendingWritesNothing() async {
         let store = makeStore()
-        await store.flush()
+        store.flush()
         #expect(!FileManager.default.fileExists(atPath: scratchURL.path))
         #expect(store.lastError == nil)
     }
@@ -323,7 +334,7 @@ private func contents(_ url: URL) throws -> String {
         #expect(aside[0].wholeMatch(of: /scratch\.md\.unreadable-\d{8}-\d{6}/) != nil)
         #expect(error.contains(aside[0]))
         store.userEdited("fresh")
-        await store.flush()
+        store.flush()
         #expect(try contents(scratchURL) == "fresh")
         #expect(
             try Data(contentsOf: support.appendingPathComponent(aside[0]))
@@ -340,10 +351,10 @@ private func contents(_ url: URL) throws -> String {
         let error = try #require(store.lastError)
         #expect(error.contains("scratch.md") && error.contains("relaunch"))
         store.userEdited("typed")
-        await store.flush()
+        store.flush()
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755], ofItemAtPath: support.path)
-        await store.flush()
+        store.flush()
         #expect(try Data(contentsOf: scratchURL) == Data([0xFF, 0xFE, 0x00]))
         #expect(store.text == "typed")
     }
@@ -357,12 +368,12 @@ private func contents(_ url: URL) throws -> String {
         let store = makeStore()
         #expect(store.lastError == nil)
         store.userEdited("kept?")
-        await store.flush()
+        store.flush()
         #expect(store.lastError?.contains("scratch.md") == true)
         #expect(store.text == "kept?", "the user's text stays on screen")
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755], ofItemAtPath: support.path)
-        await store.flush()
+        store.flush()
         #expect(try contents(scratchURL) == "kept?")
     }
 
@@ -373,7 +384,7 @@ private func contents(_ url: URL) throws -> String {
             scratchURL: blocker.appendingPathComponent("scratch.md"), saveDelay: .milliseconds(10))
         #expect(store.lastError?.contains("relaunch") == true)
         store.userEdited("typed")
-        await store.flush()
+        store.flush()
         #expect(store.text == "typed")
         #expect(try contents(blocker) == "x")
     }
@@ -388,7 +399,7 @@ private func contents(_ url: URL) throws -> String {
         try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: sub.path)
         try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: file.path)
         store.userEdited("new")
-        await store.flush()
+        store.flush()
         #expect(store.lastError?.contains("locked.md") == true)
         #expect(try contents(file) == "old")
     }
@@ -416,10 +427,10 @@ private func contents(_ url: URL) throws -> String {
         let store = makeStore()
         let locked = try openLockedFile(store)
         store.userEdited("new")
-        await store.flush()
+        store.flush()
         #expect(store.lastError != nil)
         try unlock(locked)
-        await store.flush()
+        store.flush()
         #expect(try contents(locked.file) == "new")
     }
 
@@ -427,7 +438,7 @@ private func contents(_ url: URL) throws -> String {
         let store = makeStore()
         let locked = try openLockedFile(store)
         store.userEdited("new")
-        await store.flush()
+        store.flush()
         try unlock(locked)
         store.closeFile()
         #expect(try contents(locked.file) == "new")
@@ -437,13 +448,13 @@ private func contents(_ url: URL) throws -> String {
         let store = makeStore()
         let locked = try openLockedFile(store)
         store.userEdited("new")
-        await store.flush()
+        store.flush()
         store.closeFile()
         #expect(store.source == .scratch)
         let error = try #require(store.lastError)
         #expect(error.contains("locked.md") && error.contains("discarded"))
         try unlock(locked)
-        await store.flush()
+        store.flush()
         #expect(try contents(locked.file) == "old", "a discarded save stays discarded")
     }
 
@@ -496,13 +507,13 @@ private func contents(_ url: URL) throws -> String {
         store.userEdited("scratch typing")
         let file = try makeFile("f")
         store.open(file)
-        await store.flush()
+        store.flush()
         #expect(store.lastError != nil, "still can't be saved")
         try unlockScratch()
-        await store.flush()
+        store.flush()
         #expect(try contents(scratchURL) == "scratch typing")
         #expect(store.source == .file(file) && store.text == "f")
-        await store.flush()
+        store.flush()
         #expect(try contents(scratchURL) == "scratch typing", "saved once, not again")
     }
 
@@ -540,11 +551,11 @@ private func contents(_ url: URL) throws -> String {
         let unlockScratch = try lockScratchFolder()
         let store = makeStore()
         store.userEdited("a")
-        await store.flush()
+        store.flush()
         #expect(store.lastError != nil)
         try unlockScratch()
         store.userEdited("ab")
-        await store.flush()
+        store.flush()
         #expect(store.lastError == nil)
     }
 
@@ -552,10 +563,10 @@ private func contents(_ url: URL) throws -> String {
         let store = makeStore()
         let locked = try openLockedFile(store)
         store.userEdited("new")
-        await store.flush()
+        store.flush()
         #expect(store.lastError != nil)
         try unlock(locked)
-        await store.flush()
+        store.flush()
         #expect(store.lastError == nil)
     }
 
@@ -564,7 +575,7 @@ private func contents(_ url: URL) throws -> String {
         store.open(dir.appendingPathComponent("nowhere.md"))
         let error = try #require(store.lastError)
         store.userEdited("typed")
-        await store.flush()
+        store.flush()
         #expect(try contents(scratchURL) == "typed")
         #expect(store.lastError == error, "only a save's own error goes stale when it succeeds")
     }
@@ -591,7 +602,7 @@ private func contents(_ url: URL) throws -> String {
         defer { try? unlock(locked) }
         store.userEdited("new")
         try unlockScratch()
-        await store.flush()  // The file save fails; the kept scratch notes are saved.
+        store.flush()  // The file save fails; the kept scratch notes are saved.
         #expect(try contents(scratchURL) == "scratch typing")
         #expect(store.lastError?.contains("locked.md") == true)
         #expect(store.hasUnsavedChanges, "the file edit is still pending")
@@ -605,7 +616,7 @@ private func contents(_ url: URL) throws -> String {
         #expect(await waitUntil { store.lastError != nil })
         store.dismissError()
         store.userEdited("typed while suspended")
-        await store.flush()
+        store.flush()
         let error = try #require(store.lastError)
         #expect(error.contains("talk.md") && error.contains("not being saved"))
         #expect(store.hasUnsavedChanges)
@@ -616,7 +627,7 @@ private func contents(_ url: URL) throws -> String {
         #expect(!store.hasUnsavedChanges)
         store.userEdited("typed")
         #expect(store.hasUnsavedChanges)
-        await store.flush()
+        store.flush()
         #expect(!store.hasUnsavedChanges)
     }
 
@@ -637,7 +648,7 @@ private func contents(_ url: URL) throws -> String {
     @Test func refusesToOpenTheScratchFileItself() async throws {
         let store = makeStore()
         store.userEdited("scratch")
-        await store.flush()
+        store.flush()
         let sameFile = dir.appendingPathComponent("Support/../Support/scratch.md")
         store.open(sameFile)
         #expect(store.source == .scratch)
@@ -706,7 +717,7 @@ private func contents(_ url: URL) throws -> String {
         let locked = try openLockedFile(store)
         defer { try? unlock(locked) }
         store.userEdited("new")
-        await store.flush()
+        store.flush()
         let reason = try #require(store.unsavedChangesReason)
         #expect(reason.contains("locked.md"))
         store.open(dir.appendingPathComponent("nowhere.md"))  // An unrelated error replaces it.
@@ -740,7 +751,7 @@ private func contents(_ url: URL) throws -> String {
         )
         #expect(store.text == "hello" && store.source == .file(file))
         store.userEdited("typed")
-        await store.flush()
+        store.flush()
         #expect(try Data(contentsOf: file) == big, "never overwritten")
     }
 
@@ -750,7 +761,7 @@ private func contents(_ url: URL) throws -> String {
         store.open(dir.appendingPathComponent("SUPPORT/Scratch.MD"))
         #expect(store.lastError?.contains("scratch notes") == true)
         store.userEdited("scratch")
-        await store.flush()
+        store.flush()
         // Once it exists: compared as the same file on disk.
         store.dismissError()
         store.open(dir.appendingPathComponent("Support/SCRATCH.md"))
@@ -763,11 +774,11 @@ private func contents(_ url: URL) throws -> String {
             scratchURL: blocker.appendingPathComponent("scratch.md"), saveDelay: .milliseconds(10))
         let launchError = try #require(store.lastError)
         store.userEdited("typed")
-        await store.flush()
+        store.flush()
         #expect(store.lastError == launchError, "the fuller launch message is not replaced")
         store.dismissError()
         store.userEdited("typed more")
-        await store.flush()
+        store.flush()
         let error = try #require(store.lastError)
         #expect(error.contains("relaunch"))
     }
@@ -776,10 +787,10 @@ private func contents(_ url: URL) throws -> String {
         let store = makeStore()
         let locked = try openLockedFile(store)
         store.userEdited("new")
-        await store.flush()
+        store.flush()
         store.open(dir.appendingPathComponent("nowhere.md"))
         try unlock(locked)
-        await store.flush()
+        store.flush()
         #expect(try contents(locked.file) == "new")
     }
 
@@ -861,7 +872,7 @@ private func contents(_ url: URL) throws -> String {
         try atomicReplace(file, with: Data("ext".utf8))
         #expect(await waitUntil { self.changes.count >= 1 })
         #expect(store.text == "ext")
-        await store.flush()
+        store.flush()
         #expect(try contents(file) == "ext", "the cancelled save must not clobber the edit")
     }
 
@@ -910,10 +921,10 @@ private func contents(_ url: URL) throws -> String {
         try atomicReplace(file, with: Data("fixed".utf8))
         #expect(await waitUntil { store.text == "fixed" })
         #expect(store.lastError == nil)
-        await store.flush()
+        store.flush()
         #expect(try contents(file) == "fixed", "the other editor's fix wins over held edits")
         store.userEdited("resumed")
-        await store.flush()
+        store.flush()
         #expect(try contents(file) == "resumed")
     }
 
@@ -927,10 +938,10 @@ private func contents(_ url: URL) throws -> String {
         #expect(await waitUntil { store.lastError != nil })
         let error = try #require(store.lastError)
         #expect(error.contains("talk.md") && error.contains("not being saved"))
-        await store.flush()
+        store.flush()
         #expect(try Data(contentsOf: file) == theirs)
         store.userEdited("more")
-        await store.flush()
+        store.flush()
         #expect(try Data(contentsOf: file) == theirs)
         #expect(store.text == "more", "edits stay on screen")
     }
@@ -942,7 +953,7 @@ private func contents(_ url: URL) throws -> String {
         try atomicReplace(file, with: Data([0xFF, 0xFE, 0x00]))
         #expect(await waitUntil { store.lastError != nil })
         store.userEdited("held")
-        await store.flush()
+        store.flush()
         // The other program puts back exactly the bytes we know.
         try atomicReplace(file, with: Data("good".utf8))
         #expect(await waitUntil { store.lastError == nil })
@@ -960,7 +971,7 @@ private func contents(_ url: URL) throws -> String {
         try atomicReplace(file, with: Data("good".utf8))
         #expect(await waitUntil { store.lastError == nil })
         store.userEdited("after")
-        await store.flush()
+        store.flush()
         #expect(try contents(file) == "after")
     }
 
@@ -990,9 +1001,9 @@ private func contents(_ url: URL) throws -> String {
         #expect(error.contains("gone.md") && !error.contains("\n"))
         #expect(error.contains("discarded"), "the pending edit was lost; say so")
 
-        await store.flush()
+        store.flush()
         store.userEdited("later")
-        await store.flush()
+        store.flush()
         #expect(!FileManager.default.fileExists(atPath: file.path))
         #expect(try contents(scratchURL) == "later")
 

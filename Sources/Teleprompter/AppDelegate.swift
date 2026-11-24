@@ -134,30 +134,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    /// Delays quitting until pending edits are written, so the last keystrokes before Quit are
-    /// never lost to the save debounce.
+    /// Writes pending edits before quitting, so the last keystrokes before Quit are never lost to
+    /// the save debounce.
     ///
     /// Also saves the panel's frame now if a move or resize is still waiting out the save delay.
     /// Only then: an untouched launch position isn't saved as if the user had chosen it.
     ///
     /// If notes still couldn't be written after that, asks first (see `QuitDecision`): Cancel,
     /// the default, keeps the app running with the notes still in memory.
+    ///
+    /// Answered directly, with no `Task` and no `.terminateLater`: the save is synchronous, so
+    /// there is nothing to wait for, and a deferred reply would leave AppKit in its modal
+    /// "terminating" state while a task waited for its turn on the main actor.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         frameSaver.flush()
         guard let store else { return .terminateNow }
-        Task {
-            await store.flush()
-            let previous = FocusReturn.previousApp(front: NSWorkspace.shared.frontmostApplication)
-            let quit = QuitDecision.shouldQuit(hasUnsavedChanges: store.hasUnsavedChanges) {
-                // The alert must be in front to be answered, so the app activates for it.
-                NSApp.activate()
-                return QuitDecision.makeAlert(detail: store.unsavedChangesReason).runModal()
-            }
-            // Staying open after Cancel: focus goes back as after any modal.
-            if !quit { returnFocus(to: previous) }
-            NSApp.reply(toApplicationShouldTerminate: quit)
+        store.flush()
+        let previous = FocusReturn.previousApp(front: NSWorkspace.shared.frontmostApplication)
+        let quit = QuitDecision.shouldQuit(hasUnsavedChanges: store.hasUnsavedChanges) {
+            // The alert must be in front to be answered, so the app activates for it.
+            NSApp.activate()
+            return QuitDecision.makeAlert(detail: store.unsavedChangesReason).runModal()
         }
-        return .terminateLater
+        // Staying open after Cancel: focus goes back as after any modal.
+        if !quit { returnFocus(to: previous) }
+        return quit ? .terminateNow : .terminateCancel
     }
 
     /// Remembers the new position so the panel reopens where the user left it, and keeps the

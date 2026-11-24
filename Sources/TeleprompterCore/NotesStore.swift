@@ -222,7 +222,7 @@ public enum NotesSource: Equatable, Sendable {
 
     /// Writes any pending save immediately (retrying one that failed). Called on quit, so
     /// the last keystrokes are not lost to the debounce, and by tests.
-    public func flush() async {
+    public func flush() {
         savePendingNow()
         if scratchUnsaved { _ = writeScratch(Data(scratchText.utf8)) }
     }
