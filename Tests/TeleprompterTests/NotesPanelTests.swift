@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import TeleprompterCore
 import Testing
 
@@ -126,11 +127,14 @@ import Testing
 }
 
 /// A ⌘-key event as the panel would receive it.
-@MainActor private func key(_ chars: String, _ flags: NSEvent.ModifierFlags = .command) -> NSEvent {
+/// `code` is the physical key; the default (127) is one no shortcut uses, so only `chars` counts.
+@MainActor private func key(
+    _ chars: String, _ flags: NSEvent.ModifierFlags = .command, code: Int = 127
+) -> NSEvent {
     NSEvent.keyEvent(
         with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0,
         context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false,
-        keyCode: 0)!
+        keyCode: UInt16(code))!
 }
 
 @MainActor @Test func textSizeKeysAreCommandPlusAndMinusOnly() {
@@ -238,4 +242,44 @@ import Testing
     #expect(NotesPanel.editingAction(for: key("c", [.command, .shift])) == nil)
     #expect(NotesPanel.editingAction(for: key("q")) == nil)
     #expect(NotesPanel.editingAction(for: key("c", [])) == nil)
+}
+
+// With a Hebrew (or other non-Latin) input source, ⌘ shortcuts report the layout's letter, not
+// an ASCII one, so the physical key decides. ASCII characters still win, so remapped Latin
+// layouts (Dvorak) keep their own letters.
+
+@MainActor @Test func editingShortcutsWorkWithAHebrewInputSource() {
+    let cases: [(String, Int, Selector)] = [
+        ("ס", kVK_ANSI_X, #selector(NSText.cut(_:))),
+        ("ב", kVK_ANSI_C, #selector(NSText.copy(_:))),
+        ("ה", kVK_ANSI_V, #selector(NSText.paste(_:))),
+        ("ש", kVK_ANSI_A, #selector(NSText.selectAll(_:))),
+        ("ז", kVK_ANSI_Z, #selector(EditSpy.undo(_:))),
+    ]
+    for (chars, code, action) in cases {
+        #expect(NotesPanel.editingAction(for: key(chars, code: code)) == action, "\(chars)")
+    }
+    #expect(
+        NotesPanel.editingAction(for: key("ז", [.command, .shift], code: kVK_ANSI_Z))
+            == #selector(EditSpy.redo(_:)))
+    #expect(NotesPanel.editingAction(for: key("ב", code: 127)) == nil, "unknown key")
+    // ASCII characters win over the key position (Dvorak's C is on the I key).
+    #expect(NotesPanel.editingAction(for: key("c", code: kVK_ANSI_I)) == #selector(NSText.copy(_:)))
+}
+
+@MainActor @Test func hebrewEditingShortcutReachesTheEditor() {
+    let spy = EditSpy()
+    let p = NotesPanel(settings: Settings(), content: spy)
+    p.mode = .edit
+    p.makeFirstResponder(spy)
+    #expect(p.performKeyEquivalent(with: key("ה", code: kVK_ANSI_V)))
+    #expect(spy.received == ["paste:"])
+}
+
+@MainActor @Test func textSizeKeysWorkByPositionWhenTheCharacterIsNotASCII() {
+    #expect(NotesPanel.textSizeStep(for: key("ש", code: kVK_ANSI_Equal)) == 1)
+    #expect(NotesPanel.textSizeStep(for: key("ש", code: kVK_ANSI_Minus)) == -1)
+    #expect(NotesPanel.textSizeStep(for: key("ש", code: kVK_ANSI_KeypadPlus)) == 1)
+    #expect(NotesPanel.textSizeStep(for: key("ש", code: kVK_ANSI_KeypadMinus)) == -1)
+    #expect(NotesPanel.textSizeStep(for: key("ש", code: kVK_ANSI_C)) == nil)
 }

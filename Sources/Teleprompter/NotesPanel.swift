@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import TeleprompterCore
 
 /// The floating notes window that sits under the camera and stays out of screen recordings.
@@ -102,9 +103,29 @@ final class NotesPanel: NSPanel {
     /// menu, but the app deliberately has no main menu, because AppKit adds Writing Tools,
     /// Dictation and Emoji & Symbols to an Edit menu, and those open out-of-process windows
     /// that quote the notes.
+    /// The key a ⌘ shortcut means: its character when that's one ASCII character (so remapped
+    /// Latin layouts such as Dvorak keep their own letters), else the US-layout character of the
+    /// physical key. Why: with a Hebrew (or Greek, Cyrillic…) input source the event carries
+    /// that script's letter, and ⌘C must still copy. Physical keys are also how ⌃⌥⌘N is matched.
+    static func shortcutKey(for event: NSEvent) -> String? {
+        if let chars = event.charactersIgnoringModifiers?.lowercased(), chars.count == 1,
+            chars.allSatisfy(\.isASCII)
+        {
+            return chars
+        }
+        return physicalKeys[Int(event.keyCode)]
+    }
+
+    /// US-layout characters of the physical keys the panel's shortcuts use.
+    private static let physicalKeys: [Int: String] = [
+        kVK_ANSI_X: "x", kVK_ANSI_C: "c", kVK_ANSI_V: "v", kVK_ANSI_A: "a", kVK_ANSI_Z: "z",
+        kVK_ANSI_Equal: "=", kVK_ANSI_Minus: "-", kVK_ANSI_KeypadPlus: "+",
+        kVK_ANSI_KeypadMinus: "-",
+    ]
+
     static func editingAction(for event: NSEvent) -> Selector? {
         let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
-        switch (flags, event.charactersIgnoringModifiers?.lowercased()) {
+        switch (flags, shortcutKey(for: event)) {
         case (.command, "x"): return #selector(NSText.cut(_:))
         case (.command, "c"): return #selector(NSText.copy(_:))
         case (.command, "v"): return #selector(NSText.paste(_:))
@@ -121,7 +142,7 @@ final class NotesPanel: NSPanel {
     static func textSizeStep(for event: NSEvent) -> Int? {
         let flags = event.modifierFlags.intersection([.command, .option, .control])
         guard flags == .command else { return nil }
-        switch event.charactersIgnoringModifiers {
+        switch shortcutKey(for: event) {
         case "=", "+": return 1
         case "-": return -1
         default: return nil
