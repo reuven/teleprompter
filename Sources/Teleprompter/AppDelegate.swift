@@ -148,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .hideTimer: hideTimer()
         case .timerTarget(let seconds): setTimerTarget(seconds)
         case .dismissError: store?.dismissError()  // onErrorChange rebuilds the menu.
+        case .openHomePage: NSWorkspace.shared.open(MenuModel.homePage)
         case .quit: NSApplication.shared.terminate(nil)
         }
     }

@@ -66,7 +66,8 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
         titles(m) == [
             "Edit Notes", "---", "Open…", "Open Recent ▸", "Close File", "---", "Larger Text",
             "Smaller Text", "Opacity ▸", "---", "Start Timer", "Timer Target ▸", "---",
-            "Show in Recordings (Test)", "---", "Teleprompter 9.9.9 (build 1)", "Quit",
+            "Show in Recordings (Test)", "---", "Teleprompter 9.9.9 (build 1)",
+            "Teleprompter on GitHub", "Quit",
         ])
     #expect(m.iconSymbol == "text.bubble")
     #expect(item("Edit Notes", in: m)?.action == .toggleMode)
@@ -294,5 +295,14 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
     let m = model(versionText: "Teleprompter 0.2.0 (build 104)")
     let line = try #require(item("Teleprompter 0.2.0 (build 104)", in: m))
     #expect(!line.enabled && line.action == nil)
-    #expect(Array(titles(m).suffix(2)) == ["Teleprompter 0.2.0 (build 104)", "Quit"])
+    #expect(
+        Array(titles(m).suffix(3))
+            == ["Teleprompter 0.2.0 (build 104)", "Teleprompter on GitHub", "Quit"])
+}
+
+/// The project page: README, releases (is there a newer version?) and issues. It opens in the
+/// browser, so the app adds no window of its own.
+@MainActor @Test func homePageItemOpensTheProjectOnGitHub() {
+    #expect(item("Teleprompter on GitHub", in: model())?.action == .openHomePage)
+    #expect(MenuModel.homePage.absoluteString == "https://github.com/reuven/teleprompter")
 }

@@ -18,6 +18,8 @@ enum MenuAction: Equatable {
     /// Choose the timer's target in seconds, or nil for none.
     case timerTarget(Int?)
     case dismissError
+    /// Open the project's GitHub page in the browser.
+    case openHomePage
     case quit
 }
 
@@ -141,12 +143,17 @@ struct MenuModel: Equatable {
                     checked: modeState.captureVisible)))
         entries.append(.separator)
         entries.append(.item(.info(versionText)))
+        entries.append(.item(MenuItemModel("Teleprompter on GitHub", .openHomePage)))
         entries.append(.item(MenuItemModel("Quit", .quit, key: "q")))
 
         self.entries = entries
         iconSymbol =
             captureWarning != nil || lastError != nil ? "exclamationmark.bubble" : "text.bubble"
     }
+
+    /// The project's page: README, releases and issues. Opened in the browser, so the app shows
+    /// no window of its own for it.
+    static let homePage = URL(string: "https://github.com/reuven/teleprompter")!
 
     /// The menu's version line, from the bundle's Info.plist (which build-app.sh stamps):
     /// "Teleprompter 0.2.0 (build 104)". A binary run outside a bundle has no version, and says
