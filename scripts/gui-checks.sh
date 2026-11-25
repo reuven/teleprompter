@@ -235,6 +235,30 @@ hidden_with_notes() {
 check T.6 "Hide Timer removes the strip and the notes stay" hidden_with_notes
 menu "Timer Target" "Off"
 
+# --- Version line ---------------------------------------------------------------------------
+# The menu must say which version is running, matching what build-app.sh stamped.
+plist="$app/Contents/Info.plist"
+expected_version="Teleprompter $(plutil -extract CFBundleShortVersionString raw "$plist")"
+expected_version+=" (build $(plutil -extract CFBundleVersion raw "$plist"))"
+menu_titles() {
+    ax 'click menu bar item 1 of menu bar 1
+        delay 0.3
+        set root to menu 1 of menu bar item 1 of menu bar 1
+        set out to ""
+        repeat with i in menu items of root
+            try
+                set out to out & (name of i as text) & linefeed
+            end try
+        end repeat
+        try
+            perform action "AXCancel" of root
+        on error
+            click menu bar item 1 of menu bar 1
+        end try
+        return out'
+}
+check V.1 "The menu shows the running version" grep -qxF "$expected_version" <<<"$(menu_titles)"
+
 # --- 5. Quit alert -------------------------------------------------------------------------
 # Driven by Accessibility clicks only, never keystrokes. macOS declines to bring an app forward
 # for a scripted quit, so Return and Escape in the alert (5.1, 5.2) and focus after Cancel
@@ -276,7 +300,6 @@ fi
 check 5.x "The read-only file was left untouched" same "$(cat "$notes")" "$original"
 
 # --- 7. The app bundle (Gatekeeper policy and version; the clicking stays manual) ----------
-plist="$app/Contents/Info.plist"
 check 7.3a "Universal binary (arm64 + x86_64)" \
     eval "lipo -archs '$app/Contents/MacOS/Teleprompter' | grep -q arm64 &&
         lipo -archs '$app/Contents/MacOS/Teleprompter' | grep -q x86_64"
