@@ -136,3 +136,31 @@ import Testing
     #expect(s.lastFileURL == s.recentFiles.first)
     #expect(Settings(recentFiles: [file, link]).recentFiles.count == 1, "decoded lists too")
 }
+
+@Test func timerTargetDefaultsToOff() {
+    #expect(Settings().timerTarget == nil)
+}
+
+@Test func timerTargetKeepsPresetsOnly() {
+    #expect(Settings.timerTargetPresets == [15, 30, 45, 60, 90, 120, 180])
+    #expect(Settings(timerTarget: 45).timerTarget == 45)
+    for bad in [44, -1, 0, Int.max] {
+        #expect(Settings(timerTarget: bad).timerTarget == nil, "\(bad)")
+    }
+    var s = Settings(timerTarget: 60)
+    s.timerTarget = 61
+    #expect(s.timerTarget == nil, "a bad write can't stick")
+}
+
+@Test func timerTargetRoundTripsAndDecodesTolerantly() throws {
+    let s = Settings(timerTarget: 90)
+    let decoded = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
+    #expect(decoded.timerTarget == 90)
+    let missing = try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))
+    #expect(missing.timerTarget == nil)
+    let corrupt = try JSONDecoder().decode(Settings.self, from: Data(#"{"timerTarget":7}"#.utf8))
+    #expect(corrupt.timerTarget == nil)
+    let wrongType = try JSONDecoder().decode(
+        Settings.self, from: Data(#"{"timerTarget":"soon"}"#.utf8))
+    #expect(wrongType.timerTarget == nil)
+}

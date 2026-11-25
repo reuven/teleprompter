@@ -22,6 +22,8 @@ public struct Settings: Codable, Sendable, Equatable {
     public static let maxRecentFiles = 5
     /// How much Larger Text / Smaller Text (and ⌘+ / ⌘−) change the font size, in points.
     public static let fontSizeStep: Double = 2
+    /// The timer targets the menu offers, in seconds; any other stored value means no target.
+    public static let timerTargetPresets = [15, 30, 45, 60, 90, 120, 180]
 
     /// Text size in points. Settable by the UI; always re-normalized so a bad write cannot stick.
     public var fontSize: Double {
@@ -30,6 +32,11 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Window opacity. Settable by the UI; always snapped to a preset so the menu stays truthful.
     public var opacity: Double {
         didSet { opacity = Settings.normalizedOpacity(opacity) }
+    }
+    /// The recording timer's target in seconds, or nil for none. Always one of
+    /// `timerTargetPresets`: anything else normalizes to nil, so a bad write cannot stick.
+    public var timerTarget: Int? {
+        didSet { timerTarget = Settings.normalizedTimerTarget(timerTarget) }
     }
     /// Last window position and size, restored at launch; nil until the user has moved it.
     public var windowFrame: CGRect?
@@ -45,10 +52,12 @@ public struct Settings: Codable, Sendable, Equatable {
         opacity: Double = Settings.defaultOpacity,
         windowFrame: CGRect? = nil,
         lastFileURL: URL? = nil,
-        recentFiles: [URL] = []
+        recentFiles: [URL] = [],
+        timerTarget: Int? = nil
     ) {
         self.fontSize = Settings.normalizedFontSize(fontSize)
         self.opacity = Settings.normalizedOpacity(opacity)
+        self.timerTarget = Settings.normalizedTimerTarget(timerTarget)
         self.windowFrame = windowFrame
         self.lastFileURL = lastFileURL
         self.recentFiles = Settings.normalizedRecents(recentFiles)
@@ -64,7 +73,8 @@ public struct Settings: Codable, Sendable, Equatable {
                 ?? Settings.defaultOpacity,
             windowFrame: (try? c.decodeIfPresent(CGRect.self, forKey: .windowFrame)) ?? nil,
             lastFileURL: (try? c.decodeIfPresent(URL.self, forKey: .lastFileURL)) ?? nil,
-            recentFiles: (try? c.decodeIfPresent([URL].self, forKey: .recentFiles)) ?? nil ?? []
+            recentFiles: (try? c.decodeIfPresent([URL].self, forKey: .recentFiles)) ?? nil ?? [],
+            timerTarget: (try? c.decodeIfPresent(Int.self, forKey: .timerTarget)) ?? nil
         )
     }
 
@@ -103,6 +113,10 @@ public struct Settings: Codable, Sendable, Equatable {
     // Swift's min/max pass NaN through, so NaN gets its own check before clamping.
     private static func normalizedFontSize(_ value: Double) -> Double {
         value.isNaN ? defaultFontSize : min(max(value, minFontSize), maxFontSize)
+    }
+
+    private static func normalizedTimerTarget(_ value: Int?) -> Int? {
+        value.flatMap { timerTargetPresets.contains($0) ? $0 : nil }
     }
 
     private static func normalizedOpacity(_ value: Double) -> Double {
