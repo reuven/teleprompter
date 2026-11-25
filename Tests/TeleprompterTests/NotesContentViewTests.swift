@@ -425,3 +425,84 @@ private let mediumNotes = (1...8).map { "- point number \($0)" }.joined(separato
         #expect(panel.firstResponder === v.editor)
     }
 }
+
+/// The timer strip: hidden until used, then a fixed strip at the bottom that the notes (and the
+/// "more below" badge) move above, in both modes.
+@MainActor @Suite(.tags(.guiSession)) final class TimerStripViewTests {
+    let dir = FileManager.default.temporaryDirectory
+        .appending(path: "TimerStripViewTests-\(UUID().uuidString)")
+
+    init() throws {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    func makeView(_ text: String, mode: Mode, frame: CGRect = frame) -> NotesContentView {
+        let url = dir.appending(path: "scratch.md")
+        try? Data(text.utf8).write(to: url)
+        let store = NotesStore(scratchURL: url, saveDelay: .milliseconds(1))
+        return NotesContentView(store: store, maxFontSize: 60, mode: mode, frame: frame)
+    }
+
+    @Test func hiddenByDefaultAndNotesFillTheView() {
+        let v = makeView(mediumNotes, mode: .recording)
+        #expect(v.timerLabel.isHidden)
+        #expect(v.reader.frame == v.bounds && v.editorScrollView.frame == v.bounds)
+    }
+
+    @Test func showingTheTimerShowsItsTextAndMovesTheNotesUp() {
+        let v = makeView(mediumNotes, mode: .recording)
+        v.showTimer("0:42", level: .normal)
+        #expect(!v.timerLabel.isHidden && v.timerLabel.stringValue == "0:42")
+        #expect(v.timerLabel.textColor == .white)
+        let notes = TimerStrip.notesFrame(in: v.bounds, showsTimer: true)
+        #expect(v.reader.frame == notes && v.editorScrollView.frame == notes)
+        #expect(v.fittedSize?.height == frame.height - TimerStrip.height)
+    }
+
+    @Test func levelsColorTheTime() {
+        let v = makeView("x", mode: .recording)
+        v.showTimer("0:56 / 1:00", level: .warning)
+        #expect(v.timerLabel.textColor == .systemOrange)
+        v.showTimer("1:02 / 1:00", level: .over)
+        #expect(v.timerLabel.textColor == .systemRed)
+        v.showTimer("0:10 / 1:00", level: .normal)
+        #expect(v.timerLabel.textColor == .white)
+    }
+
+    @Test func hidingTheTimerGivesTheSpaceBack() {
+        let v = makeView(mediumNotes, mode: .recording)
+        v.showTimer("0:01", level: .normal)
+        v.showTimer(nil, level: .normal)
+        #expect(v.timerLabel.isHidden)
+        #expect(v.reader.frame == v.bounds && v.fittedSize == frame.size)
+    }
+
+    @Test func notesFitIntoTheSpaceAboveTheStrip() throws {
+        let tall = CGRect(x: 0, y: 0, width: 600, height: 300)
+        let v = makeView(mediumNotes, mode: .recording, frame: tall)
+        let without = try #require(v.fittedFontSize)
+        v.showTimer("0:00", level: .normal)
+        #expect(try #require(v.fittedFontSize) <= without)
+    }
+
+    @Test func moreBelowBadgeSitsAboveTheStrip() {
+        let v = makeView(longNotes, mode: .recording)
+        v.showTimer("0:00", level: .normal)
+        v.layoutSubtreeIfNeeded()
+        #expect(!v.badge.isHidden)
+        #expect(v.badge.frame.minY >= TimerStrip.height)
+    }
+
+    @Test func editModeAndResizesKeepTheStrip() {
+        let v = makeView("# Title", mode: .edit)
+        v.showTimer("0:05", level: .normal)
+        #expect(v.editorScrollView.frame == TimerStrip.notesFrame(in: v.bounds, showsTimer: true))
+        v.setFrameSize(CGSize(width: 500, height: 240))
+        #expect(v.editorScrollView.frame == TimerStrip.notesFrame(in: v.bounds, showsTimer: true))
+        #expect(v.reader.frame == TimerStrip.notesFrame(in: v.bounds, showsTimer: true))
+    }
+}

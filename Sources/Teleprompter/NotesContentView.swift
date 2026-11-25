@@ -27,6 +27,12 @@ final class NotesContentView: NSView, NSTextViewDelegate {
     private let readerContainer = NSTextContainer()
     /// "▼ more below", pinned to the bottom edge when notes overflow even at the floor size.
     let badge = NSTextField(labelWithString: RecordingLayout.moreBelowText)
+    /// The recording timer, in a strip at the bottom; hidden until `showTimer` gives it text.
+    let timerLabel = NSTextField(labelWithString: "")
+    /// Whether the timer strip is showing, so the notes sit above it.
+    private var showsTimer = false
+    /// The badge's distance from the bottom: above the strip while the timer shows.
+    private var badgeBottom: NSLayoutConstraint?
 
     /// The size passed to the fitter by the last fit, or nil if nothing has been fitted yet.
     private(set) var fittedSize: CGSize?
@@ -70,6 +76,8 @@ final class NotesContentView: NSView, NSTextViewDelegate {
         configureEditor()
         configureReader()
         configureBadge()
+        configureTimerLabel()
+        layoutNotes()
         showMode()
     }
 
@@ -89,7 +97,39 @@ final class NotesContentView: NSView, NSTextViewDelegate {
     /// Refits after a resize: the window got bigger or smaller, so the best size changed too.
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        layoutNotes()
         refit()
+    }
+
+    /// Shows `text` in the timer strip, colored by `level`, or hides the strip when `text` is nil.
+    /// Showing or hiding it moves the notes and refits them; updating the text alone doesn't.
+    func showTimer(_ text: String?, level: TimerLevel) {
+        timerLabel.stringValue = text ?? ""
+        timerLabel.textColor = Self.color(for: level)
+        let shows = text != nil
+        timerLabel.isHidden = !shows
+        guard shows != showsTimer else { return }
+        showsTimer = shows
+        badgeBottom?.constant = shows ? -TimerStrip.height : 0
+        layoutNotes()
+        refit()
+    }
+
+    /// White normally, amber near the target, red past it (on the panel's dark background).
+    static func color(for level: TimerLevel) -> NSColor {
+        switch level {
+        case .normal: .white
+        case .warning: .systemOrange
+        case .over: .systemRed
+        }
+    }
+
+    /// Puts the editor and the reader in the notes area: the whole view, or the part above the
+    /// timer strip.
+    private func layoutNotes() {
+        let notes = TimerStrip.notesFrame(in: bounds, showsTimer: showsTimer)
+        editorScrollView.frame = notes
+        reader.frame = notes
     }
 
     /// Call when the store's text changed from outside the app (another editor saved the file):
@@ -134,8 +174,6 @@ final class NotesContentView: NSView, NSTextViewDelegate {
     }
 
     private func configureEditor() {
-        editorScrollView.frame = bounds
-        editorScrollView.autoresizingMask = [.width, .height]
         editorScrollView.drawsBackground = false
         editorScrollView.hasVerticalScroller = true
         editorScrollView.scrollerStyle = .overlay
@@ -178,8 +216,6 @@ final class NotesContentView: NSView, NSTextViewDelegate {
         // what doesn't fit, and the badge says so.
         readerContainer.size = CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
         readerContainer.widthTracksTextView = true
-        reader.frame = bounds
-        reader.autoresizingMask = [.width, .height]
         addSubview(reader)
     }
 
@@ -190,9 +226,25 @@ final class NotesContentView: NSView, NSTextViewDelegate {
         badge.backgroundColor = NSColor.black.withAlphaComponent(0.7)
         badge.translatesAutoresizingMaskIntoConstraints = false
         addSubview(badge)
+        let bottom = badge.bottomAnchor.constraint(equalTo: bottomAnchor)
+        badgeBottom = bottom
         NSLayoutConstraint.activate([
-            badge.centerXAnchor.constraint(equalTo: centerXAnchor),
-            badge.bottomAnchor.constraint(equalTo: bottomAnchor),
+            badge.centerXAnchor.constraint(equalTo: centerXAnchor), bottom,
+        ])
+    }
+
+    /// A fixed, readable size whatever the notes shrink to, with digits of equal width so the
+    /// time doesn't wobble as it counts.
+    private func configureTimerLabel() {
+        timerLabel.font = .monospacedDigitSystemFont(ofSize: 18, weight: .semibold)
+        timerLabel.alignment = .right
+        timerLabel.isHidden = true
+        timerLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(timerLabel)
+        NSLayoutConstraint.activate([
+            timerLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            timerLabel.centerYAnchor.constraint(
+                equalTo: bottomAnchor, constant: -TimerStrip.height / 2),
         ])
     }
 
