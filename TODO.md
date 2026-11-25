@@ -40,4 +40,5 @@ Design: [`docs/superpowers/specs/2026-11-24-teleprompter-design.md`](docs/superp
 - [x] App icon (original artwork in `docs/images`, `scripts/AppIcon.icns`) — released in v0.1.1
 - [x] Recording timer (⌃⌥⌘T, target presets, amber/red): spec and plan in `docs/superpowers`; GUI checks T.1–T.6
 - [x] By hand: checklist 1.10 (timer absent from a ScreenFlow recording; colors) — passed 2026-11-25
-- [ ] Release v0.2.0 (the timer)
+- [x] Release v0.2.0 (the timer)
+- [x] Over-target cue: color only, by decision (Reuven, 2026-11-25)
