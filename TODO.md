@@ -33,7 +33,8 @@ Design: [`docs/superpowers/specs/2026-11-24-teleprompter-design.md`](docs/superp
 - [x] `scripts/gui-checks.sh`: drives the built app through Accessibility (clicks only, no keystrokes); 14 checks passing
 - [x] Fix: read-only files were overwritten by atomic saves (found by the GUI checks)
 - [x] Fix: the red warning tint drew the menu-bar icon almost black on macOS 26; now a warning symbol
-- [ ] Release v0.1.2 (the two fixes)
-- [ ] By hand: 5.4 focus after Cancel, 5.5 warning icon visible, 6.2 display unplug
+- [x] Release v0.1.2 (the two fixes)
+- [x] 5.5 warning icon visible (Reuven, 2026-11-25)
+- [ ] By hand: 5.4 focus after Cancel, 6.2 display unplug
 - [ ] Section 7: download the release zip and confirm the Gatekeeper “Open Anyway” flow
 - [x] App icon (original artwork in `docs/images`, `scripts/AppIcon.icns`) — released in v0.1.1
