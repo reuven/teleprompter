@@ -141,6 +141,7 @@ and relaunch.
   quarantines itself; the real download and the dialog are yours.)
 - [ ] **7.2 Open Anyway.** System Settings › Privacy & Security › Open Anyway, then confirm.
   Expected: the app launches on macOS 26, with a menu-bar icon and no Dock icon.
-- [ ] **7.3 Version.** Check the app's version (Finder › Get Info).
+- [ ] **7.3 Version.** Check the version line in the menu-bar menu (above Quit) and Finder ›
+  Get Info. *(the menu line is automated)*
   Expected: it matches the release; `lipo -archs` of the binary shows arm64 and x86_64
   (the architectures are *automated*).
