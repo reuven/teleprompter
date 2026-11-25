@@ -43,8 +43,9 @@ ad hoc.
 ## Usage
 
 - The app lives in the menu bar (no Dock icon). The menu's last line above Quit shows the
-  running version, e.g. "Teleprompter 0.2.1 (build 110)". The notes panel floats under the
-  camera on every Space, above full-screen apps.
+  running version, e.g. "Teleprompter 0.2.1 (build 110)", and **Teleprompter on GitHub**
+  below it opens this page (to check for a newer release or report a problem). The notes
+  panel floats under the camera on every Space, above full-screen apps.
 - **Edit Notes** lets you type; **Lock for Recording** makes the panel click-through and
   stops it taking focus, so your typing and clicks go to the app underneath.
 - In edit mode, drag the panel by its edge margin (the dark border around the text).
