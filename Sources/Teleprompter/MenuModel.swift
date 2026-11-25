@@ -12,6 +12,11 @@ enum MenuAction: Equatable {
     case smallerText
     case opacity(Double)
     case toggleCaptureVisible
+    /// ⌃⌥⌘T's action: start, stop or restart the recording timer.
+    case timerPress
+    case hideTimer
+    /// Choose the timer's target in seconds, or nil for none.
+    case timerTarget(Int?)
     case dismissError
     case quit
 }
@@ -78,10 +83,13 @@ struct MenuModel: Equatable {
     /// - `source`/`lastError`: the notes store's current source and error.
     /// - `captureWarning`: the sticky "notes may be visible" warning, if the check raised one.
     /// - `shortcutUnavailable`: ⌃⌥⌘N couldn't be registered.
+    /// - `timerPhase`/`timerShortcutUnavailable`: the recording timer's state, and whether ⌃⌥⌘T
+    ///   couldn't be registered.
     /// - `fileExists`: used to disable recent files that are gone, so picking one can't fail.
     init(
         settings: Settings, modeState: ModeState, source: NotesSource, lastError: String?,
-        captureWarning: String?, shortcutUnavailable: Bool, fileExists: (URL) -> Bool
+        captureWarning: String?, shortcutUnavailable: Bool, timerPhase: RecordingTimer.Phase,
+        timerShortcutUnavailable: Bool, fileExists: (URL) -> Bool
     ) {
         var entries: [MenuEntry] = []
         if let captureWarning { entries.append(.item(.info(captureWarning))) }
@@ -120,6 +128,11 @@ struct MenuModel: Equatable {
         entries.append(.submenu(title: "Opacity", enabled: true, items: presets))
         entries.append(.separator)
 
+        entries += Self.timerEntries(
+            phase: timerPhase, target: settings.timerTarget,
+            shortcutUnavailable: timerShortcutUnavailable)
+        entries.append(.separator)
+
         entries.append(
             .item(
                 MenuItemModel(
@@ -146,6 +159,33 @@ struct MenuModel: Equatable {
             names.filter { $0 == name }.count > 1
                 ? "\(name) — \(url.deletingLastPathComponent().lastPathComponent)" : name
         }
+    }
+
+    /// The timer group: the start/stop/restart item named for what it will do, Hide Timer while
+    /// the timer shows, the shortcut problem if any, and the target presets. No item carries
+    /// ⌃⌥⌘T as a key equivalent: with the menu open it would fire along with the global hotkey,
+    /// counting one press twice.
+    private static func timerEntries(
+        phase: RecordingTimer.Phase, target: Int?, shortcutUnavailable: Bool
+    ) -> [MenuEntry] {
+        let pressTitle =
+            switch phase {
+            case .hidden: "Start Timer"
+            case .running: "Stop Timer"
+            case .stopped: "Restart Timer"
+            }
+        var entries: [MenuEntry] = [.item(MenuItemModel(pressTitle, .timerPress))]
+        if phase != .hidden { entries.append(.item(MenuItemModel("Hide Timer", .hideTimer))) }
+        if shortcutUnavailable { entries.append(.item(.info("Shortcut ⌃⌥⌘T unavailable"))) }
+        let targets =
+            [MenuItemModel("Off", .timerTarget(nil), checked: target == nil)]
+            + Settings.timerTargetPresets.map { preset in
+                MenuItemModel(
+                    TimerDisplay.format(seconds: preset), .timerTarget(preset),
+                    checked: preset == target)
+            }
+        entries.append(.submenu(title: "Timer Target", enabled: true, items: targets))
+        return entries
     }
 
     /// Replaces `menu`'s items with these entries; every enabled item sends `action` to `target`.

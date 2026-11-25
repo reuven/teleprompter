@@ -19,11 +19,14 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
     lastError: String? = nil,
     captureWarning: String? = nil,
     shortcutUnavailable: Bool = false,
+    timerPhase: RecordingTimer.Phase = .hidden,
+    timerShortcutUnavailable: Bool = false,
     exists: @escaping (URL) -> Bool = { _ in true }
 ) -> MenuModel {
     MenuModel(
         settings: settings, modeState: state, source: source, lastError: lastError,
         captureWarning: captureWarning, shortcutUnavailable: shortcutUnavailable,
+        timerPhase: timerPhase, timerShortcutUnavailable: timerShortcutUnavailable,
         fileExists: exists)
 }
 
@@ -61,7 +64,8 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
     #expect(
         titles(m) == [
             "Edit Notes", "---", "Open…", "Open Recent ▸", "Close File", "---", "Larger Text",
-            "Smaller Text", "Opacity ▸", "---", "Show in Recordings (Test)", "---", "Quit",
+            "Smaller Text", "Opacity ▸", "---", "Start Timer", "Timer Target ▸", "---",
+            "Show in Recordings (Test)", "---", "Quit",
         ])
     #expect(m.iconSymbol == "text.bubble")
     #expect(item("Edit Notes", in: m)?.action == .toggleMode)
@@ -201,7 +205,7 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
             == titles(m).map { $0.replacingOccurrences(of: " ▸", with: "") }.map {
                 $0 == "---" ? "" : $0
             })
-    #expect(menu.items.filter(\.isSeparatorItem).count == 5, "four, plus one under the error")
+    #expect(menu.items.filter(\.isSeparatorItem).count == 6, "five, plus one under the error")
     let error = try #require(menu.item(withTitle: "oops"))
     #expect(!error.isEnabled && error.action == nil)
     let open = try #require(menu.item(withTitle: "Open…"))
@@ -220,4 +224,52 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
     }
     #expect(receiver.picked == [.open, .opacity(0.85), .openRecent(talk), .dismissError])
     #expect(MenuModel.action(of: error) == nil)
+}
+
+// MARK: Timer
+
+@MainActor @Test func timerItemFollowsThePhase() {
+    let t0 = ContinuousClock.now
+    #expect(item("Start Timer", in: model())?.action == .timerPress)
+    #expect(item("Hide Timer", in: model()) == nil, "nothing to hide yet")
+    let running = model(timerPhase: .running(since: t0))
+    #expect(item("Stop Timer", in: running)?.action == .timerPress)
+    #expect(item("Hide Timer", in: running)?.action == .hideTimer)
+    let stopped = model(timerPhase: .stopped(elapsed: .seconds(47)))
+    #expect(item("Restart Timer", in: stopped)?.action == .timerPress)
+    #expect(item("Hide Timer", in: stopped)?.action == .hideTimer)
+    #expect(item("Start Timer", in: running) == nil && item("Start Timer", in: stopped) == nil)
+}
+
+@MainActor @Test func timerShortcutProblemIsShown() {
+    #expect(item("Shortcut ⌃⌥⌘T unavailable", in: model()) == nil)
+    let m = model(timerShortcutUnavailable: true)
+    #expect(item("Shortcut ⌃⌥⌘T unavailable", in: m)?.enabled == false)
+    let order = titles(m)
+    #expect(
+        order.firstIndex(of: "Shortcut ⌃⌥⌘T unavailable") == order.firstIndex(of: "Start Timer")!
+            + 1)
+}
+
+@MainActor @Test func timerTargetSubmenuOffersThePresets() throws {
+    let (enabled, items) = try #require(submenu("Timer Target", in: model()))
+    #expect(enabled)
+    #expect(items.map(\.title) == ["Off", "0:15", "0:30", "0:45", "1:00", "1:30", "2:00", "3:00"])
+    let presets: [MenuAction?] = Settings.timerTargetPresets.map { MenuAction.timerTarget($0) }
+    #expect(items.map(\.action) == [MenuAction.timerTarget(nil)] + presets)
+    #expect(items.filter(\.checked).map(\.title) == ["Off"])
+    let (_, chosen) = try #require(
+        submenu("Timer Target", in: model(settings: Settings(timerTarget: 90))))
+    #expect(chosen.filter(\.checked).map(\.title) == ["1:30"])
+}
+
+/// The global hotkey alone handles ⌃⌥⌘T; a menu key equivalent would count a press twice
+/// while the menu is open.
+@MainActor @Test func timerItemsHaveNoKeyEquivalent() throws {
+    let m = model(timerPhase: .stopped(elapsed: .zero))
+    for title in ["Restart Timer", "Hide Timer"] {
+        #expect(try #require(item(title, in: m)).keyEquivalent == "")
+    }
+    let (_, targets) = try #require(submenu("Timer Target", in: m))
+    #expect(targets.allSatisfy { $0.keyEquivalent == "" })
 }

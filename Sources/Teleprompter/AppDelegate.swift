@@ -35,6 +35,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // The latest capture warning; sticky until relaunch (see checkPanelHidden).
     private var captureWarningText: String?
     private var shortcutUnavailable = false
+    // The recording timer; ⌃⌥⌘T (timerHotKey) or the menu presses it.
+    private var timer = RecordingTimer()
+    // Nil when ⌃⌥⌘T couldn't be registered; the menu says so and its item still works.
+    private var timerHotKey: HotKey?
+    private var timerShortcutUnavailable = false
+    // Refreshes the time a few times a second, only while it's running.
+    private var timerTick: Timer?
     // Saves the frame once a move or resize settles; ignores moves caused by display changes.
     private lazy var frameSaver = FrameSaver(
         delay: .milliseconds(500), quietAfterScreenChange: .seconds(1)
@@ -102,6 +109,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             shortcutUnavailable = true
             refreshMenu()
         }
+        // ⌃⌥⌘T, the same path as the Start/Stop/Restart Timer item.
+        timerHotKey = HotKey(
+            keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey | cmdKey)
+        ) { [weak self] in self?.pressTimer() }
+        if timerHotKey == nil {
+            timerShortcutUnavailable = true
+            refreshMenu()
+        }
     }
 
     /// The one place that reacts when the notes or their source changed: from outside the app
@@ -129,6 +144,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .smallerText: stepTextSize(-1)
         case .opacity(let value): setOpacity(value)
         case .toggleCaptureVisible: toggleCaptureVisible()
+        case .timerPress: pressTimer()
+        case .hideTimer: hideTimer()
+        case .timerTarget(let seconds): setTimerTarget(seconds)
         case .dismissError: store?.dismissError()  // onErrorChange rebuilds the menu.
         case .quit: NSApplication.shared.terminate(nil)
         }
@@ -188,7 +206,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             MenuModel(
                 settings: settings, modeState: modeState, source: store.source,
                 lastError: store.lastError, captureWarning: captureWarningText,
-                shortcutUnavailable: shortcutUnavailable,
+                shortcutUnavailable: shortcutUnavailable, timerPhase: timer.phase,
+                timerShortcutUnavailable: timerShortcutUnavailable,
                 fileExists: { FileManager.default.fileExists(atPath: $0.path) }))
     }
 
@@ -246,6 +265,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         settingsStore.save(settings)
         contentView?.maxFontSize = settings.fontSize
         refreshMenu()
+    }
+
+    // Start → stop → restart (RecordingTimer decides), then the display and the menu follow.
+    // ContinuousClock never jumps with the system time or sleep.
+    private func pressTimer() {
+        timer.press(at: .now)
+        syncTimer()
+    }
+
+    private func hideTimer() {
+        timer.hide()
+        syncTimer()
+    }
+
+    private func setTimerTarget(_ seconds: Int?) {
+        settings.timerTarget = seconds
+        settingsStore.save(settings)
+        syncTimer()
+    }
+
+    // Shows the current time (or hides the strip), and keeps a 0.25 s refresh running exactly
+    // while the timer runs. The refresh is in the common run-loop modes so it keeps ticking while
+    // a menu is open.
+    private func syncTimer() {
+        showTime()
+        if timer.isRunning, timerTick == nil {
+            let tick = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.showTime() }
+            }
+            RunLoop.main.add(tick, forMode: .common)
+            timerTick = tick
+        } else if !timer.isRunning {
+            timerTick?.invalidate()
+            timerTick = nil
+        }
+        refreshMenu()
+    }
+
+    private func showTime() {
+        guard timer.isVisible else {
+            contentView?.showTimer(nil, level: .normal)
+            return
+        }
+        let elapsed = timer.elapsed(at: .now)
+        contentView?.showTimer(
+            TimerDisplay.text(elapsed: elapsed, target: settings.timerTarget),
+            level: TimerDisplay.level(elapsed: elapsed, target: settings.timerTarget))
     }
 
     private func setOpacity(_ value: Double) {
