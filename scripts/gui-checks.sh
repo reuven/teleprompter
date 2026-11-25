@@ -219,13 +219,20 @@ check T.2 "The timer counts while running" advanced
 menu "Stop Timer"
 stopped_at="$(timer_text)"
 sleep 1.5
-check T.3 "Stop Timer freezes the time" same "$(timer_text)" "$stopped_at"
+# Each check first requires the timer to have been read, so an empty read (a label the script
+# can't find) fails instead of passing as "unchanged" or "gone".
+frozen() { [[ -n "$stopped_at" && "$(timer_text)" == "$stopped_at" ]]; }
+check T.3 "Stop Timer freezes the time" frozen
 menu "Timer Target" "0:15"
 check T.4 "A target shows next to the time" grep -q '/ 0:15$' <<<"$(timer_text)"
 check T.5 "The panel stays hidden from capture with the timer showing" \
     same "$(window_server | cut -d' ' -f2)" 0
+before_hide="$(timer_text)"
 menu "Hide Timer"
-check T.6 "Hide Timer removes the strip" same "$(timer_text)" ""
+hidden_with_notes() {
+    [[ -n "$before_hide" && -z "$(timer_text)" ]] && grep -q "first point" <<<"$(notes_text)"
+}
+check T.6 "Hide Timer removes the strip and the notes stay" hidden_with_notes
 menu "Timer Target" "Off"
 
 # --- 5. Quit alert -------------------------------------------------------------------------
