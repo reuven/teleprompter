@@ -85,11 +85,12 @@ struct MenuModel: Equatable {
     /// - `shortcutUnavailable`: ⌃⌥⌘N couldn't be registered.
     /// - `timerPhase`/`timerShortcutUnavailable`: the recording timer's state, and whether ⌃⌥⌘T
     ///   couldn't be registered.
+    /// - `versionText`: the running version, from `versionText(from:)`.
     /// - `fileExists`: used to disable recent files that are gone, so picking one can't fail.
     init(
         settings: Settings, modeState: ModeState, source: NotesSource, lastError: String?,
         captureWarning: String?, shortcutUnavailable: Bool, timerPhase: RecordingTimer.Phase,
-        timerShortcutUnavailable: Bool, fileExists: (URL) -> Bool
+        timerShortcutUnavailable: Bool, versionText: String, fileExists: (URL) -> Bool
     ) {
         var entries: [MenuEntry] = []
         if let captureWarning { entries.append(.item(.info(captureWarning))) }
@@ -139,6 +140,7 @@ struct MenuModel: Equatable {
                     "Show in Recordings (Test)", .toggleCaptureVisible,
                     checked: modeState.captureVisible)))
         entries.append(.separator)
+        entries.append(.item(.info(versionText)))
         entries.append(.item(MenuItemModel("Quit", .quit, key: "q")))
 
         self.entries = entries

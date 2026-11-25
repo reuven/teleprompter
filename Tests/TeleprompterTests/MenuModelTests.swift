@@ -21,13 +21,14 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
     shortcutUnavailable: Bool = false,
     timerPhase: RecordingTimer.Phase = .hidden,
     timerShortcutUnavailable: Bool = false,
+    versionText: String = "Teleprompter 9.9.9 (build 1)",
     exists: @escaping (URL) -> Bool = { _ in true }
 ) -> MenuModel {
     MenuModel(
         settings: settings, modeState: state, source: source, lastError: lastError,
         captureWarning: captureWarning, shortcutUnavailable: shortcutUnavailable,
         timerPhase: timerPhase, timerShortcutUnavailable: timerShortcutUnavailable,
-        fileExists: exists)
+        versionText: versionText, fileExists: exists)
 }
 
 /// The top-level item titled `title`, or nil.
@@ -65,7 +66,7 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
         titles(m) == [
             "Edit Notes", "---", "Open…", "Open Recent ▸", "Close File", "---", "Larger Text",
             "Smaller Text", "Opacity ▸", "---", "Start Timer", "Timer Target ▸", "---",
-            "Show in Recordings (Test)", "---", "Quit",
+            "Show in Recordings (Test)", "---", "Teleprompter 9.9.9 (build 1)", "Quit",
         ])
     #expect(m.iconSymbol == "text.bubble")
     #expect(item("Edit Notes", in: m)?.action == .toggleMode)
@@ -286,4 +287,12 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
             == "Teleprompter 0.2.0")
     #expect(MenuModel.versionText(from: [:]) == "Teleprompter (development build)")
     #expect(MenuModel.versionText(from: nil) == "Teleprompter (development build)")
+}
+
+/// So a user can always tell which version is running: a gray line just above Quit.
+@MainActor @Test func versionLineSitsAboveQuit() throws {
+    let m = model(versionText: "Teleprompter 0.2.0 (build 104)")
+    let line = try #require(item("Teleprompter 0.2.0 (build 104)", in: m))
+    #expect(!line.enabled && line.action == nil)
+    #expect(Array(titles(m).suffix(2)) == ["Teleprompter 0.2.0 (build 104)", "Quit"])
 }

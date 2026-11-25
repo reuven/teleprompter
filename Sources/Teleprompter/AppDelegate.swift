@@ -208,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 lastError: store.lastError, captureWarning: captureWarningText,
                 shortcutUnavailable: shortcutUnavailable, timerPhase: timer.phase,
                 timerShortcutUnavailable: timerShortcutUnavailable,
+                versionText: MenuModel.versionText(from: Bundle.main.infoDictionary),
                 fileExists: { FileManager.default.fileExists(atPath: $0.path) }))
     }
 
