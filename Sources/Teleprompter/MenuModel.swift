@@ -146,6 +146,19 @@ struct MenuModel: Equatable {
             captureWarning != nil || lastError != nil ? "exclamationmark.bubble" : "text.bubble"
     }
 
+    /// The menu's version line, from the bundle's Info.plist (which build-app.sh stamps):
+    /// "Teleprompter 0.2.0 (build 104)". A binary run outside a bundle has no version, and says
+    /// so rather than showing nothing.
+    static func versionText(from info: [String: Any]?) -> String {
+        guard let version = info?["CFBundleShortVersionString"] as? String else {
+            return "Teleprompter (development build)"
+        }
+        guard let build = info?["CFBundleVersion"] as? String else {
+            return "Teleprompter \(version)"
+        }
+        return "Teleprompter \(version) (build \(build))"
+    }
+
     /// The mode item names the action it performs: the mode you'd switch to, not the current one.
     static func modeTitle(for mode: Mode) -> String {
         mode == .edit ? "Lock for Recording" : "Edit Notes"

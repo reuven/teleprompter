@@ -273,3 +273,17 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
     let (_, targets) = try #require(submenu("Timer Target", in: m))
     #expect(targets.allSatisfy { $0.keyEquivalent == "" })
 }
+
+// MARK: Version
+
+/// The version comes from the bundle's Info.plist, which build-app.sh stamps; a bare
+/// `swift run` binary has no bundle version and says so instead of showing nothing.
+@MainActor @Test func versionTextComesFromTheBundleInfo() {
+    let info: [String: Any] = ["CFBundleShortVersionString": "0.2.0", "CFBundleVersion": "104"]
+    #expect(MenuModel.versionText(from: info) == "Teleprompter 0.2.0 (build 104)")
+    #expect(
+        MenuModel.versionText(from: ["CFBundleShortVersionString": "0.2.0"])
+            == "Teleprompter 0.2.0")
+    #expect(MenuModel.versionText(from: [:]) == "Teleprompter (development build)")
+    #expect(MenuModel.versionText(from: nil) == "Teleprompter (development build)")
+}
