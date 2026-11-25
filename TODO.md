@@ -44,4 +44,4 @@ Design: [`docs/superpowers/specs/2026-11-24-teleprompter-design.md`](docs/superp
 - [x] Over-target cue: color only, by decision (Reuven, 2026-11-25)
 - [x] Bug: no way to see the running version — menu line above Quit; GUI check V.1
 - [x] Menu item: Teleprompter on GitHub
-- [ ] Release v0.2.1 (version line, GitHub link)
+- [x] Release v0.2.1 (version line, GitHub link)
