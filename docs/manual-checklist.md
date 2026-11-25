@@ -46,6 +46,10 @@ while it runs. Review the recording afterward, frame by frame where noted.
 - [ ] **1.9 Capture test is not remembered.** Leave Show in Recordings (Test) on, quit, and
   relaunch.
   Expected: no red test box after relaunch.
+- [ ] **1.10 Timer.** With a target of 0:15, press ⌃⌥⌘T while recording and let it run
+  past the target, then press it again.
+  Expected: the timer strip is absent from the recording, like the notes. On your screen the
+  time turns amber at 0:10, red at 0:15, and stays frozen after the second press.
 
 ## 2. Focus
 

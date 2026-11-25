@@ -161,6 +161,14 @@ alert_window() {
         end repeat
         return 0'
 }
+# The timer strip's text ("0:42" or "0:42 / 1:00"), or nothing while it's hidden.
+timer_text() {
+    ax 'repeat with t in static texts of window 1
+            set v to value of t as text
+            if v contains ":" and v does not contain "more below" then return v
+        end repeat
+        return ""'
+}
 alert_open() { [[ "$(alert_window)" != 0 ]]; }
 alert_closed() { ! alert_open; }
 # Sends Quit as an Apple Event, in the background: while the alert is up the app is in a modal
@@ -200,6 +208,25 @@ check 6.1d "Relaunch restores the opacity (70%)" opacity_restored
 check 6.1e "Relaunch reopens the last file" grep -q "first point" <<<"$(notes_text)"
 check 1.x "Notes panel is hidden from capture (window server)" \
     same "$(window_server | cut -d' ' -f2)" 0
+
+# --- Recording timer (⌃⌥⌘T's menu twin) ------------------------------------------------------
+menu "Start Timer"
+first="$(timer_text)"
+check T.1 "Start Timer shows the timer from 0:00" grep -Eq '^0:0[0-9]$' <<<"$first"
+sleep 2.2
+advanced() { [[ "$(timer_text)" != "$first" ]]; }
+check T.2 "The timer counts while running" advanced
+menu "Stop Timer"
+stopped_at="$(timer_text)"
+sleep 1.5
+check T.3 "Stop Timer freezes the time" same "$(timer_text)" "$stopped_at"
+menu "Timer Target" "0:15"
+check T.4 "A target shows next to the time" grep -q '/ 0:15$' <<<"$(timer_text)"
+check T.5 "The panel stays hidden from capture with the timer showing" \
+    same "$(window_server | cut -d' ' -f2)" 0
+menu "Hide Timer"
+check T.6 "Hide Timer removes the strip" same "$(timer_text)" ""
+menu "Timer Target" "Off"
 
 # --- 5. Quit alert -------------------------------------------------------------------------
 # Driven by Accessibility clicks only, never keystrokes. macOS declines to bring an app forward

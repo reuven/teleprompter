@@ -49,6 +49,12 @@ ad hoc.
 - In edit mode, drag the panel by its edge margin (the dark border around the text).
 - **⌃⌥⌘N** (the physical N key, so it works with any input source) toggles between the two
   from any app. If macOS refuses to register the shortcut, the menu says "Shortcut ⌃⌥⌘N unavailable" (on macOS 26, another app using the same keys usually doesn't cause that, so if ⌃⌥⌘N triggers something else too, use the menu instead).
+- **⌃⌥⌘T** starts a timer at the bottom right of the panel, hidden from recordings like the
+  notes. Press it again to stop (the take's length stays on screen), and again to restart
+  from 0:00. The menu has the same Start/Stop/Restart Timer item and **Hide Timer**. Under
+  **Timer Target**, pick a length (0:15 to 3:00): the time shows as `0:42 / 1:00`, turns
+  amber in the last 5 seconds and red once you reach the target. The target is remembered;
+  the timer itself isn't.
 - Notes are Markdown. In recording mode, headings, lists (including nested and numbered),
   bold, italic, and inline code render. Quotes, tables, links, and images show as plain text: a
   quote's text without its marker, a table's cells separated by tabs, a link's text without its
@@ -62,7 +68,8 @@ ad hoc.
   appear live. Close File returns to your scratch notes.
 - Saving back to a file replaces it atomically, as most editors do, so Finder tags and other
   extended attributes on that file aren't kept.
-- Position, size, font size, opacity, and the last file are remembered between launches.
+- Position, size, font size, opacity, the timer target, and the last file are remembered
+  between launches.
 
 ## Is it really hidden? The capture test
 
