@@ -8,6 +8,15 @@ here stay empty.
 
 Release: ______  Date: ______  macOS: ______  ScreenFlow: ______
 
+**Run `scripts/gui-checks.sh` first** (after `scripts/build-app.sh`, with Teleprompter quit).
+It drives the built app through Accessibility, with clicks only and never keystrokes, and
+prints PASS or FAIL for the items marked *(automated)* below: the quit alert's buttons and
+default, refusing to overwrite a read-only file, persistence across a relaunch, the capture
+setting as the window server reports it, and the bundle's architectures and Gatekeeper policy.
+It needs Accessibility permission for your terminal app (System Settings › Privacy & Security
+› Accessibility), backs up and restores your own settings, and takes about a minute. Tick an
+automated item when the script passed it; everything else here still needs you.
+
 ## 1. ScreenFlow recording (first, and the one that matters most)
 
 Start a ScreenFlow screen recording of the display the panel is on, then do the steps below
@@ -88,15 +97,24 @@ while it runs. Review the recording afterward, frame by frame where noted.
 
 ## 5. Quit alert
 
-Simulate a save problem: make the open file read-only (`chmod a-w file.md`), then edit in the
-panel and choose Quit.
+Simulate a save problem: make the open file read-only (`chmod a-w file.md`) or lock it
+(Finder › Get Info › Locked, or `chflags uchg file.md`), then edit in the panel and choose
+Quit. Undo afterward (`chmod u+w` / `chflags nouchg`).
+
+Return, Escape and focus can't be scripted faithfully (macOS won't bring a scripted app to
+the front), so 5.1, 5.2 and 5.4 stay manual. Quit from the menu yourself.
 
 - [ ] **5.1 Return cancels.** Press Return in the alert.
   Expected: the alert closes, the app keeps running, nothing quits.
 - [ ] **5.2 Escape.** Quit again and press Escape.
   Expected: Escape cancels or does nothing; it never quits. (Return stays Cancel, as in 5.1.)
-- [ ] **5.3 Quit Anyway** is destructive and never the default.
-  Expected: only an explicit click on Quit Anyway quits.
+- [ ] **5.3 Quit Anyway** is destructive and never the default. *(automated)*
+  Expected: only an explicit click on Quit Anyway quits; Cancel is the default.
+- [ ] **5.5 Warning icon.** While the save error shows, look at the menu bar.
+  Expected: the icon is a bubble with an exclamation mark, as easy to see as the other
+  menu-bar icons; it goes back to the plain bubble after Dismiss.
+- [ ] **5.6 Read-only file.** *(automated)*
+  Expected: an edit to a read-only file is not saved, and the file keeps its content.
 - [ ] **5.4 Focus after Cancel.** Do 5.1 from recording mode.
   Expected: focus returns to the previous app.
 
@@ -105,7 +123,8 @@ panel and choose Quit.
 Set a non-default panel position and size, font size, opacity, and open a file; quit normally
 and relaunch.
 
-- [ ] **6.1 Relaunch.** Expected: frame, font size, opacity, and last file all come back.
+- [ ] **6.1 Relaunch.** *(automated)*
+  Expected: frame, font size, opacity, and last file all come back.
 - [ ] **6.2 Display unplug.** With the panel on an external display, unplug it.
   Expected: the panel comes back at the default position, and relaunching does not restore
   the frame macOS moved it to (the saved frame is not overwritten by the system move).
@@ -114,8 +133,10 @@ and relaunch.
 
 - [ ] **7.1 Quarantined download.** Download the release zip from GitHub in a browser (so it is
   quarantined) to a clean folder, unzip, move to /Applications, and open it.
-  Expected: macOS blocks the first open.
+  Expected: macOS blocks the first open. (The script checks the policy on a copy it
+  quarantines itself; the real download and the dialog are yours.)
 - [ ] **7.2 Open Anyway.** System Settings › Privacy & Security › Open Anyway, then confirm.
   Expected: the app launches on macOS 26, with a menu-bar icon and no Dock icon.
 - [ ] **7.3 Version.** Check the app's version (Finder › Get Info).
-  Expected: it matches the release; `lipo -archs` of the binary shows arm64 and x86_64.
+  Expected: it matches the release; `lipo -archs` of the binary shows arm64 and x86_64
+  (the architectures are *automated*).

@@ -98,6 +98,7 @@ scripts/coverage.sh        # tests plus the 100% line-coverage gate on the gated
 scripts/mutation.sh        # Muter mutation testing on TeleprompterCore (about 20 minutes)
 swift format lint --strict -r Sources Tests
 scripts/make-icon.sh       # regenerate the app icon and PNGs after editing an SVG in docs/images
+scripts/gui-checks.sh      # drive the built app through Accessibility (see docs/manual-checklist.md)
 ```
 
 - Tests that need a window server (a logged-in GUI session: windows, the capture checks, the
