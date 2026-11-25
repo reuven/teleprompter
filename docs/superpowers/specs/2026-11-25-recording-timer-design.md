@@ -1,7 +1,7 @@
 # Recording timer — design
 
 Date: 2026-11-25
-Status: draft, awaiting Reuven's approval
+Status: approved 2026-11-25
 
 ## Intent
 
@@ -58,9 +58,11 @@ recording.
 - Past an hour it shows `1:02:03`.
 - The strip sits at the bottom right in a fixed, readable size (independent of the notes'
   shrink-to-fit), in a monospaced-digit font so the numbers don't wobble.
-- Menu: a **Start Timer / Stop Timer / Restart Timer** item (the title follows the state,
-  showing ⌃⌥⌘T), **Hide Timer** (only while it shows), and a **Timer Target ▸** submenu with
-  a check mark on the current preset.
+- Menu: a **Start Timer / Stop Timer / Restart Timer** item (the title follows the state),
+  **Hide Timer** (only while it shows), and a **Timer Target ▸** submenu with a check mark on
+  the current preset. The items don't display ⌃⌥⌘T: a menu key equivalent would fire along with
+  the global shortcut while the menu is open, counting one press twice. The README documents
+  the shortcut instead.
 - If ⌃⌥⌘T can't be registered, the menu says so, as it does for ⌃⌥⌘N, and the menu item
   still works.
 
