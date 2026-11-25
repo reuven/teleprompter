@@ -42,3 +42,5 @@ Design: [`docs/superpowers/specs/2026-11-24-teleprompter-design.md`](docs/superp
 - [x] By hand: checklist 1.10 (timer absent from a ScreenFlow recording; colors) — passed 2026-11-25
 - [x] Release v0.2.0 (the timer)
 - [x] Over-target cue: color only, by decision (Reuven, 2026-11-25)
+- [x] Bug: no way to see the running version — menu line above Quit; GUI check V.1
+- [ ] Release v0.2.1 (version line)
