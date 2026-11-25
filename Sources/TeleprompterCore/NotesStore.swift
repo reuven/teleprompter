@@ -246,6 +246,10 @@ public enum NotesSource: Equatable, Sendable {
                 return
             }
             do {
+                // An atomic save renames a temporary file over the path, which needs only the
+                // folder's permission, so a read-only file would be replaced without an error.
+                // Check first: read-only means the user doesn't want it changed.
+                if Self.isReadOnly(url) { throw CocoaError(.fileWriteNoPermission) }
                 try data.write(to: url, options: .atomic)
                 knownFileBytes = data
                 pending = nil
@@ -439,6 +443,13 @@ public enum NotesSource: Equatable, Sendable {
 
     private static func resolved(_ url: URL) -> URL {
         url.standardizedFileURL.resolvingSymlinksInPath()
+    }
+
+    /// Whether `url` exists but may not be written. A missing file isn't read-only: saving
+    /// recreates it, as before.
+    private static func isReadOnly(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        return fm.fileExists(atPath: url.path) && !fm.isWritableFile(atPath: url.path)
     }
 
     private enum ReadFailure: Error {

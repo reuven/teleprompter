@@ -404,6 +404,39 @@ private func contents(_ url: URL) throws -> String {
         #expect(try contents(file) == "old")
     }
 
+    /// A read-only file in a writable folder: an atomic save could still replace it (the
+    /// rename needs only the folder's permission), so the store must check, not rely on the
+    /// write failing. The file keeps its content and its read-only permission.
+    @Test func readOnlyFileIsNotOverwritten() async throws {
+        let file = try makeFile("old", name: "readonly.md")
+        let store = makeStore()
+        store.open(file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: file.path)
+        store.userEdited("new")
+        store.flush()
+        #expect(store.lastError?.contains("readonly.md") == true)
+        #expect(store.hasUnsavedChanges)
+        #expect(try contents(file) == "old")
+        let permissions =
+            try FileManager.default.attributesOfItem(atPath: file.path)[
+                .posixPermissions] as? Int
+        #expect(permissions == 0o444)
+    }
+
+    /// Making a read-only file writable again lets the held edit through on the next try.
+    @Test func readOnlyFileSavesOnceWritableAgain() async throws {
+        let file = try makeFile("old", name: "readonly.md")
+        let store = makeStore()
+        store.open(file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: file.path)
+        store.userEdited("new")
+        store.flush()
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+        store.flush()
+        #expect(try contents(file) == "new")
+        #expect(store.lastError == nil)
+    }
+
     /// Makes `locked/locked.md` holding "old", opens it, then makes it unwritable.
     func openLockedFile(_ store: NotesStore) throws -> (dir: URL, file: URL) {
         let sub = dir.appendingPathComponent("locked")
