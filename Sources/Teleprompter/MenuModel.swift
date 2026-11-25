@@ -57,8 +57,8 @@ enum MenuEntry: Equatable {
 }
 
 /// Every decision about the menu-bar menu, computed from the app's state: which items exist and
-/// in what order, their titles, and which are enabled or checked; plus whether the menu-bar icon
-/// shows the warning tint.
+/// in what order, their titles, and which are enabled or checked; plus which symbol the menu-bar
+/// icon shows.
 ///
 /// Why: `StatusMenu` must stay a thin renderer, so the menu's rules (Open offered in both modes,
 /// Close File only with a file open, text size disabled at its limits, the error line and its
@@ -67,8 +67,11 @@ enum MenuEntry: Equatable {
 struct MenuModel: Equatable {
     /// The menu's entries, top to bottom.
     let entries: [MenuEntry]
-    /// Whether the menu-bar icon is tinted: a capture warning or a notes error is showing.
-    let showsWarningTint: Bool
+    /// The SF Symbol for the menu-bar icon: a bubble with an exclamation mark while a capture
+    /// warning or a notes error is showing, so a problem is visible without opening the menu.
+    /// A different shape rather than a red tint: macOS 26's menu bar drew the tint almost
+    /// black, invisible on a dark wallpaper, and a shape doesn't depend on color vision.
+    let iconSymbol: String
 
     /// Builds the menu for this state.
     ///
@@ -126,7 +129,8 @@ struct MenuModel: Equatable {
         entries.append(.item(MenuItemModel("Quit", .quit, key: "q")))
 
         self.entries = entries
-        showsWarningTint = captureWarning != nil || lastError != nil
+        iconSymbol =
+            captureWarning != nil || lastError != nil ? "exclamationmark.bubble" : "text.bubble"
     }
 
     /// The mode item names the action it performs: the mode you'd switch to, not the current one.

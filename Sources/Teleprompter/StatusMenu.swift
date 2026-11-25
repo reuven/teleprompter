@@ -21,8 +21,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
-        statusItem.button?.image = NSImage(
-            systemSymbolName: "text.bubble", accessibilityDescription: "Teleprompter")
         menu.delegate = self
         statusItem.menu = menu
     }
@@ -34,11 +32,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// alone (by identity) so the icon behaves normally.
     var statusItemWindow: NSWindow? { statusItem.button?.window }
 
-    /// Shows `model`: replaces the menu's items in place and tints the icon red while a warning
-    /// or error is showing, so a problem is visible without opening the menu.
+    /// Shows `model`: replaces the menu's items in place and sets the icon's symbol (see
+    /// `MenuModel.iconSymbol`). Images from `systemSymbolName` are templates, so the menu bar
+    /// draws them in the same color as its neighbors.
     func render(_ model: MenuModel) {
         model.render(into: menu, target: self, action: #selector(pick(_:)))
-        statusItem.button?.contentTintColor = model.showsWarningTint ? .systemRed : nil
+        statusItem.button?.image = NSImage(
+            systemSymbolName: model.iconSymbol, accessibilityDescription: "Teleprompter")
     }
 
     @objc private func pick(_ sender: NSMenuItem) {

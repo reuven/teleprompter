@@ -63,12 +63,22 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
             "Edit Notes", "---", "Open…", "Open Recent ▸", "Close File", "---", "Larger Text",
             "Smaller Text", "Opacity ▸", "---", "Show in Recordings (Test)", "---", "Quit",
         ])
-    #expect(!m.showsWarningTint)
+    #expect(m.iconSymbol == "text.bubble")
     #expect(item("Edit Notes", in: m)?.action == .toggleMode)
     #expect(item("Open…", in: m) == MenuItemModel("Open…", .open, key: "o"))
     #expect(item("Quit", in: m) == MenuItemModel("Quit", .quit, key: "q"))
     #expect(item("Larger Text", in: m)?.keyEquivalent == "+")
     #expect(item("Smaller Text", in: m)?.keyEquivalent == "-")
+}
+
+/// The warning is a different shape, not a tint: macOS 26's menu bar drew the red tint
+/// almost black, invisible on a dark wallpaper, while an untinted symbol stays white like its
+/// neighbors (and a shape doesn't rely on color vision). Both names must be real SF Symbols.
+@MainActor @Test func iconSymbolsExist() {
+    for symbol in [model().iconSymbol, model(lastError: "x").iconSymbol] {
+        #expect(
+            NSImage(systemSymbolName: symbol, accessibilityDescription: nil) != nil, "\(symbol)")
+    }
 }
 
 @MainActor @Test func openIsOfferedInBothModes() {
@@ -86,7 +96,7 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
     #expect(item("Close File", in: model(source: .file(talk)))?.action == .closeFile)
 }
 
-@MainActor @Test func errorLineAndDismissSitAtTheTopAndTintTheIcon() {
+@MainActor @Test func errorLineAndDismissSitAtTheTopAndMarkTheIcon() {
     let m = model(lastError: "Couldn't open “x.md”: the file doesn't exist.")
     #expect(
         Array(titles(m).prefix(4)) == [
@@ -94,7 +104,7 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
         ])
     #expect(item("Couldn't open “x.md”: the file doesn't exist.", in: m)?.enabled == false)
     #expect(item("Dismiss", in: m)?.action == .dismissError)
-    #expect(m.showsWarningTint)
+    #expect(m.iconSymbol == "exclamationmark.bubble")
 }
 
 @MainActor @Test func captureWarningComesFirstAndHasNoDismiss() {
@@ -104,7 +114,7 @@ private let notes = URL(fileURLWithPath: "/Users/me/notes.markdown")
             "Notes may be visible", "file problem", "Dismiss", "---", "Edit Notes",
         ])
     #expect(item("Notes may be visible", in: m)?.enabled == false)
-    #expect(model(captureWarning: "Notes may be visible").showsWarningTint)
+    #expect(model(captureWarning: "Notes may be visible").iconSymbol == "exclamationmark.bubble")
     #expect(item("Dismiss", in: model(captureWarning: "w")) == nil)
 }
 
