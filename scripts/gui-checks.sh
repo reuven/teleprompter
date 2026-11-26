@@ -40,6 +40,17 @@ if ! osascript -e 'tell application "System Events" to get name of menu bar 1 of
         "Privacy & Security › Accessibility." >&2
     exit 2
 fi
+# While the screen is locked, macOS hides apps' windows from Accessibility (the window server
+# still lists them), so every check would fail with confusing System Events errors.
+screen_locked() {
+    [[ "$(ioreg -n Root -d1 -a | plutil -extract IOConsoleUsers.0.CGSSessionScreenIsLocked \
+        raw - 2>/dev/null)" == true ]]
+}
+if screen_locked; then
+    echo "The screen is locked; unlock it and run again (Accessibility can't see apps' windows" \
+        "while it's locked)." >&2
+    exit 2
+fi
 
 work="$(mktemp -d)"
 notes="$work/notes.md"
