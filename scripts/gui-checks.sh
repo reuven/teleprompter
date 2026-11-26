@@ -282,7 +282,10 @@ else
         w="$(alert_window)"
         buttons="$(ax "return name of buttons of window $w")"
         default="$(ax "return name of (value of attribute \"AXDefaultButton\" of window $w)")"
-        check 5.3a "The alert offers Cancel and Quit Anyway" same "$buttons" "Cancel, Quit Anyway"
+        # Compared as a set: macOS 27 reports the buttons in a different order than 26 did, and
+        # the order is the system's layout, not the app's promise; 5.3b checks the default.
+        button_set="$(tr ',' '\n' <<<"$buttons" | sed 's/^ *//' | sort | paste -sd, -)"
+        check 5.3a "The alert offers Cancel and Quit Anyway" same "$button_set" "Cancel,Quit Anyway"
         check 5.3b "Cancel is the default button (Return), not Quit Anyway" same "$default" Cancel
 
         ax "click button \"Cancel\" of window $w" >/dev/null
