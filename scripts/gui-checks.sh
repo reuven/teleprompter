@@ -116,9 +116,14 @@ wait_until() {
 running() { pgrep -x Teleprompter >/dev/null; }
 stopped() { ! running; }
 panel_shown() { [[ "$(ax 'count windows' 2>/dev/null)" -ge 1 ]]; }
+# Fails loudly if the app or its panel doesn't appear: a wait that ran out used to fall through
+# (inside an && chain set -e doesn't fire) and surfaced later as an unclear System Events error.
+# The panel gets up to 15 s; on macOS 27 the first launch of a freshly signed app can be slow.
 launch() {
     open "$app"
-    wait_until running && wait_until panel_shown
+    wait_until running || { echo "Teleprompter didn't start" >&2; return 1; }
+    for _ in 1 2 3; do wait_until panel_shown && break; done
+    panel_shown || { echo "The notes panel didn't appear within 15 s of launch" >&2; return 1; }
     sleep 1
 }
 frame() {
