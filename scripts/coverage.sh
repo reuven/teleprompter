@@ -22,7 +22,26 @@ slot() {
 }
 
 slot swift test --enable-code-coverage
-json="$(swift test --show-codecov-path)"
+
+# Since Swift 6.4, SwiftPM builds one test bundle per test target, and the summary at
+# --show-codecov-path is exported from only one of them, so the app's files went missing.
+# Export the report from the merged profile and every test bundle instead. (A missing file
+# still fails below: the gate requires each gated file to be present, not just not low.)
+profdata="$(dirname "$(swift test --show-codecov-path)")/default.profdata"
+binaries=()
+for bundle in "$(swift build --show-bin-path)"/*.xctest; do
+  [ -d "$bundle" ] && binaries+=("$bundle/Contents/MacOS/$(basename "$bundle" .xctest)")
+done
+if [ ${#binaries[@]} -eq 0 ]; then
+  echo "No test bundles found next to the build products" >&2
+  exit 1
+fi
+objects=()
+for binary in "${binaries[@]:1}"; do objects+=(-object "$binary"); done
+json="$(mktemp)"
+trap 'rm -f "$json"' EXIT
+xcrun llvm-cov export -summary-only -instr-profile "$profdata" "${binaries[0]}" \
+  ${objects[@]+"${objects[@]}"} >"$json"
 
 # Prints "<file> <percent>" for each gated file; -1 when the percent is missing.
 gate() {
